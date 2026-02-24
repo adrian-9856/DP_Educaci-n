@@ -23,7 +23,8 @@ Sistema de gestión de inscripciones y salones de clase implementado con **Googl
 | 5 · Hojas de Grado | `crearHojaGrado()`: estructura, formato y validaciones |
 | 6 · Transferencia | `onEdit()` y lógica de movimiento de alumnos |
 | 7 · Triggers | `installTriggers()` / `removeTriggers()` |
-| 8 · KoboToolbox | Descarga CSV, importación y sync automático desde KoboToolbox |
+| 8 · KoboToolbox | Descarga CSV, filtro educación, importación y sync automático |
+| 9 · Seguimiento | Hoja de seguimiento post-graduación (Quinto Bachillerato) |
 
 ---
 
@@ -108,15 +109,35 @@ Fila en Interés marcada como ✅
 
 ## Grados Disponibles
 
-1. Primero Básico
-2. Segundo Básico
-3. Tercero Básico
-4. Cuarto Bachillerato
-5. Quinto Bachillerato
-6. Sexto Bachillerato
+| # | Nombre | Hoja creada |
+|---|---|---|
+| 1 | Primera Etapa de Primaria | `Primera Etapa de Primaria 2026` |
+| 2 | Segunda Etapa de Primaria | `Segunda Etapa de Primaria 2026` |
+| 3 | Primera Etapa de Básicos | `Primera Etapa de Básicos 2026` |
+| 4 | Segunda Etapa de Básicos | `Segunda Etapa de Básicos 2026` |
+| 5 | Cuarto Bachillerato | `Cuarto Bachillerato 2026` |
+| 6 | **Quinto Bachillerato** | `Quinto Bachillerato 2026` ← genera graduados |
 
-Cada hoja se crea con el año actual automáticamente:
-`Primero Básico 2026`, `Segundo Básico 2026`, etc.
+Al marcar un alumno de **Quinto Bachillerato** como **Graduando**, se ofrece registrarlo automáticamente en la hoja **Seguimiento Graduados**.
+
+## Hoja de Seguimiento de Graduados
+
+| Columna | Descripción |
+|---|---|
+| ID | SEG-001, SEG-002… |
+| Nombre Completo | Copiado desde la hoja de Quinto Bachillerato |
+| DPI / CUI | Copiado automáticamente |
+| No. Teléfono | Copiado automáticamente |
+| Edad | Copiado automáticamente |
+| Año Graduación | Año en que se marcó como Graduando |
+| Estado Post-Grad | Empleado / Continúa estudiando / Sin contacto / Emigró |
+| Observaciones | Nota con ID de origen |
+
+**Colores por estado:**
+- 🟢 Empleado → verde
+- 🔵 Continúa estudiando → azul claro
+- 🟡 Sin contacto → amarillo
+- 🟣 Emigró → morado claro
 
 ---
 
@@ -185,16 +206,23 @@ DP Educación
   ├── ⚙️  Configurar hoja Interés
   ├── 🔧  Instalar trigger automático
   ├── 📚 Crear hoja de grado
-  │     ├── Primero Básico … Sexto Bachillerato
+  │     ├── Primera Etapa de Primaria
+  │     ├── Segunda Etapa de Primaria
+  │     ├── Primera Etapa de Básicos
+  │     ├── Segunda Etapa de Básicos
+  │     ├── Cuarto Bachillerato
+  │     ├── Quinto Bachillerato
   │     └── ✨ Crear TODOS los grados
   ├── 📋 Seleccionar papelería faltante
   ├── 🔄 Procesar acciones pendientes
   ├── 📊 Ver resumen de alumnos
+  ├── 🎓 Configurar hoja Seguimiento
+  ├── 🎓 Registrar graduado manualmente
   └── 🌐 KoboToolbox
         ├── 🔑 Configurar token de API
-        ├── 🔍 Ver columnas disponibles (actual)
-        ├── 🔍 Ver columnas disponibles (hist.)
-        ├── 🔄 Actualizar datos actuales (2025+)
+        ├── 🗺️ Ver hoja de mapeo (actuales)
+        ├── 🗺️ Ver hoja de mapeo (histórico)
+        ├── 🔄 Sync a hoja Interés (solo educación)
         ├── 📥 Importar histórico (una sola vez)
         ├── 🔁 Sync automático (cada hora)
         └── ⛔ Detener sync automático

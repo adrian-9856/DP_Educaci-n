@@ -33,13 +33,16 @@ const COL_GRADO = {
 };
 
 const GRADOS = [
-  'Primero Básico',
-  'Segundo Básico',
-  'Tercero Básico',
+  'Primera Etapa de Primaria',
+  'Segunda Etapa de Primaria',
+  'Primera Etapa de Básicos',
+  'Segunda Etapa de Básicos',
   'Cuarto Bachillerato',
-  'Quinto Bachillerato',
-  'Sexto Bachillerato'
+  'Quinto Bachillerato'
 ];
+
+// Grado del que salen los graduados que pasan a Seguimiento
+const GRADO_GRADUACION = 'Quinto Bachillerato';
 
 const PAPELERIA_OPCIONES = [
   'Partida de nacimiento',
@@ -55,12 +58,12 @@ const MODALIDADES          = ['Presencial', 'Semi-presencial'];
 const ESTADOS              = ['Oyente', 'Deserción', 'Graduando'];
 const ACCIONES             = ['-- Seleccionar --', ...GRADOS.map(g => 'Enviar a: ' + g)];
 const ULTIMO_ANIO_OPCIONES = [
-  'Primaria',
-  'Primero Básico',
-  'Segundo Básico',
-  'Tercero Básico',
-  'Cuarto Bachillerato',
-  'Quinto Bachillerato'
+  'Sin estudios previos',
+  'Primera Etapa de Primaria',
+  'Segunda Etapa de Primaria',
+  'Primera Etapa de Básicos',
+  'Segunda Etapa de Básicos',
+  'Cuarto Bachillerato'
 ];
 
 const COLOR_HEADER_INTERES = '#1565C0';
@@ -83,16 +86,46 @@ const COLOR_HEADER_KOBO = '#6A1B9A';
 const PROP_KOBO_TOKEN = 'KOBO_API_TOKEN';
 
 // Mapeo de columnas KoboToolbox → columnas de la hoja Interés
-// AJUSTA los valores izquierdos (nombre exacto del campo en el CSV de Kobo)
-// después de ejecutar "🔍 Ver columnas disponibles"
+// AJUSTA los valores (nombre exacto del campo en el CSV de Kobo)
+// después de ejecutar "🗺️ Ver hoja de mapeo"
 const KOBO_MAP = {
-  NOMBRE:      'nombre_completo',   // ← nombre del campo Kobo
+  NOMBRE:      'nombre_completo',      // ← ajustar con nombre real del campo Kobo
   EDAD:        'edad',
   DPI:         'dpi_cui',
   ULTIMO_ANIO: 'ultimo_anio_cursado',
   PAPELERIA:   'papeleria_faltante',
   COMENTARIO:  'comentario'
 };
+
+// Filtro de educación: campo y valor exacto en el CSV de Kobo que indica
+// que el registro pertenece al programa de Educación Extraescolar.
+// Deja KOBO_CAMPO_PROGRAMA en '' para importar TODOS los registros sin filtrar.
+const KOBO_CAMPO_PROGRAMA  = 'programa';              // ← ajustar
+const KOBO_VALOR_EDUCACION = 'Educación Extraescolar'; // ← ajustar
+
+// ── Hoja de Seguimiento ───────────────────────────────────────────────────────
+const HOJA_SEGUIMIENTO    = 'Seguimiento Graduados';
+const COLOR_HEADER_SEGUIM = '#4A148C';
+
+// Columnas de la hoja Seguimiento (1-based)
+const COL_SEGUIM = {
+  ID:          1,
+  NOMBRE:      2,
+  DPI:         3,
+  TELEFONO:    4,
+  EDAD:        5,
+  ANIO_GRAD:   6,
+  ESTADO_POST: 7,
+  OBSERVACION: 8
+};
+
+const ESTADOS_POST_GRAD = [
+  'Seguimiento activo',
+  'Empleado',
+  'Continúa estudiando',
+  'Sin contacto',
+  'Emigró'
+];
 
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -107,19 +140,22 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(
       ui.createMenu('📚 Crear hoja de grado')
-        .addItem('Primero Básico',           'crearHojaPrimeroBasico')
-        .addItem('Segundo Básico',           'crearHojaSegundoBasico')
-        .addItem('Tercero Básico',           'crearHojaTerceroBasico')
-        .addItem('Cuarto Bachillerato',      'crearHojaCuartoBachillerato')
-        .addItem('Quinto Bachillerato',      'crearHojaQuintoBachillerato')
-        .addItem('Sexto Bachillerato',       'crearHojaSextoBachillerato')
+        .addItem('Primera Etapa de Primaria',  'crearHojaPrimariaEtapa1')
+        .addItem('Segunda Etapa de Primaria',  'crearHojaPrimariaEtapa2')
+        .addItem('Primera Etapa de Básicos',   'crearHojaBasicosEtapa1')
+        .addItem('Segunda Etapa de Básicos',   'crearHojaBasicosEtapa2')
+        .addItem('Cuarto Bachillerato',         'crearHojaCuartoBachillerato')
+        .addItem('Quinto Bachillerato',         'crearHojaQuintoBachillerato')
         .addSeparator()
-        .addItem('✨ Crear TODOS los grados', 'crearTodasLasHojas')
+        .addItem('✨ Crear TODOS los grados',   'crearTodasLasHojas')
     )
     .addSeparator()
-    .addItem('📋 Seleccionar papelería faltante', 'abrirSelectorPapeleria')
-    .addItem('🔄 Procesar acciones pendientes',   'procesarAccionesPendientes')
-    .addItem('📊 Ver resumen de alumnos',          'mostrarResumen')
+    .addItem('📋 Seleccionar papelería faltante',   'abrirSelectorPapeleria')
+    .addItem('🔄 Procesar acciones pendientes',     'procesarAccionesPendientes')
+    .addItem('📊 Ver resumen de alumnos',            'mostrarResumen')
+    .addSeparator()
+    .addItem('🎓 Configurar hoja Seguimiento',       'setupHojaSeguimiento')
+    .addItem('🎓 Registrar graduado manualmente',    'registrarGraduadoManual')
     .addSeparator()
     .addSubMenu(
       ui.createMenu('🌐 KoboToolbox')
@@ -137,12 +173,12 @@ function onOpen() {
     .addToUi();
 }
 
-function crearHojaPrimeroBasico()      { crearHojaGrado('Primero Básico'); }
-function crearHojaSegundoBasico()      { crearHojaGrado('Segundo Básico'); }
-function crearHojaTerceroBasico()      { crearHojaGrado('Tercero Básico'); }
+function crearHojaPrimariaEtapa1()     { crearHojaGrado('Primera Etapa de Primaria'); }
+function crearHojaPrimariaEtapa2()     { crearHojaGrado('Segunda Etapa de Primaria'); }
+function crearHojaBasicosEtapa1()      { crearHojaGrado('Primera Etapa de Básicos'); }
+function crearHojaBasicosEtapa2()      { crearHojaGrado('Segunda Etapa de Básicos'); }
 function crearHojaCuartoBachillerato() { crearHojaGrado('Cuarto Bachillerato'); }
 function crearHojaQuintoBachillerato() { crearHojaGrado('Quinto Bachillerato'); }
-function crearHojaSextoBachillerato()  { crearHojaGrado('Sexto Bachillerato'); }
 
 function crearTodasLasHojas() {
   GRADOS.forEach(g => crearHojaGrado(g, true));
@@ -440,20 +476,26 @@ function _siguienteId(hoja, grado) {
 // ────────────────────────────────────────────────────────────────────────────
 
 function onEdit(e) {
-  const range = e.range;
-  const hoja  = range.getSheet();
+  const range     = e.range;
+  const hoja      = range.getSheet();
+  const nombreH   = hoja.getName();
+  const col       = range.getColumn();
+  const fila      = range.getRow();
+  const valor     = (e.value || '').toString().trim();
 
-  if (hoja.getName()    !== HOJA_INTERES)       return;
-  if (range.getColumn() !== COL_INTERES.ACCION) return;
-  if (range.getRow()    < 2)                    return;
+  // ── Transferir desde Interés ──────────────────────────────────────────────
+  if (nombreH === HOJA_INTERES && col === COL_INTERES.ACCION && fila >= 2) {
+    if (!valor || valor === '-- Seleccionar --') return;
+    const grado = valor.replace('Enviar a: ', '').trim();
+    if (GRADOS.indexOf(grado) >= 0) _transferirEstudiante(fila, grado);
+    return;
+  }
 
-  const valor = (e.value || '').toString().trim();
-  if (!valor || valor === '-- Seleccionar --')  return;
-
-  const grado = valor.replace('Enviar a: ', '').trim();
-  if (GRADOS.indexOf(grado) < 0)                return;
-
-  _transferirEstudiante(range.getRow(), grado);
+  // ── Detectar graduado en Quinto Bachillerato ──────────────────────────────
+  const nombreQuinto = _nombreHoja(GRADO_GRADUACION);
+  if (nombreH === nombreQuinto && col === COL_GRADO.ESTADO && fila >= 3) {
+    if (valor === 'Graduando') _ofrecerRegistrarGraduado(hoja, fila);
+  }
 }
 
 function _transferirEstudiante(fila, grado) {
@@ -864,19 +906,35 @@ function koboSincronizarHojaInteres() {
         .forEach(function(d) { if (d !== '') dpisExistentes.add(String(d).trim()); });
     }
 
+    // Índice del campo programa (para filtro de educación)
+    const idxPrograma = KOBO_CAMPO_PROGRAMA
+      ? headers.indexOf(KOBO_CAMPO_PROGRAMA)
+      : -1;
+
+    let omitidosPrograma = 0;
+    let omitidosDupes    = 0;
+
     // Procesar filas Kobo
     const filasNuevas = [];
     rows.slice(1).forEach(function(row) {
+
+      // ── Filtrar solo educación ──────────────────────────────────────────
+      if (idxPrograma >= 0 && KOBO_VALOR_EDUCACION) {
+        const prog = String(row[idxPrograma] || '').trim();
+        if (prog !== KOBO_VALOR_EDUCACION) { omitidosPrograma++; return; }
+      }
+
+      // ── Deduplicar por DPI ──────────────────────────────────────────────
       const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
-      if (dpi && dpisExistentes.has(dpi)) return; // ya existe
+      if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
 
-      const nombre    = idx.NOMBRE      >= 0 ? (row[idx.NOMBRE]      || '') : '';
-      const edad      = idx.EDAD        >= 0 ? (row[idx.EDAD]        || '') : '';
-      const ultimoA   = idx.ULTIMO_ANIO >= 0 ? (row[idx.ULTIMO_ANIO] || '') : '';
-      const papeleria = idx.PAPELERIA   >= 0 ? (row[idx.PAPELERIA]   || '') : '';
-      const comentario= idx.COMENTARIO  >= 0 ? (row[idx.COMENTARIO]  || '') : '';
+      const nombre     = idx.NOMBRE      >= 0 ? (row[idx.NOMBRE]      || '') : '';
+      const edad       = idx.EDAD        >= 0 ? (row[idx.EDAD]        || '') : '';
+      const ultimoA    = idx.ULTIMO_ANIO >= 0 ? (row[idx.ULTIMO_ANIO] || '') : '';
+      const papeleria  = idx.PAPELERIA   >= 0 ? (row[idx.PAPELERIA]   || '') : '';
+      const comentario = idx.COMENTARIO  >= 0 ? (row[idx.COMENTARIO]  || '') : '';
 
-      if (!nombre && !dpi) return; // fila vacía
+      if (!nombre && !dpi) return; // fila completamente vacía
 
       filasNuevas.push([
         String(nombre).trim(),
@@ -888,7 +946,7 @@ function koboSincronizarHojaInteres() {
         '-- Seleccionar --'
       ]);
 
-      if (dpi) dpisExistentes.add(dpi); // prevenir duplicados dentro del mismo lote
+      if (dpi) dpisExistentes.add(dpi);
     });
 
     if (!filasNuevas.length) {
@@ -917,10 +975,15 @@ function koboSincronizarHojaInteres() {
       filasNuevas.length + ' nuevos registros agregados desde KoboToolbox.',
       '✅ Sync completado', 7
     );
+    const filtroMsg = idxPrograma >= 0
+      ? 'Omitidos (otro programa): ' + omitidosPrograma + '\n'
+      : (KOBO_CAMPO_PROGRAMA ? '⚠️ Campo "' + KOBO_CAMPO_PROGRAMA + '" no encontrado en CSV\n' : '');
+
     ui.alert(
       '✅ Sincronización completada\n\n' +
-      'Registros nuevos agregados: ' + filasNuevas.length + '\n' +
-      'Registros ya existentes:    ' + (rows.length - 1 - filasNuevas.length) + '\n\n' +
+      'Registros nuevos (educación): ' + filasNuevas.length + '\n' +
+      filtroMsg +
+      'Duplicados omitidos (DPI):    ' + omitidosDupes + '\n\n' +
       '💡 Revisa la columna "Acción" para asignar los alumnos nuevos a su grado.'
     );
 
@@ -1054,5 +1117,198 @@ function koboEliminarTriggerSync() {
     eliminados.length > 0
       ? '✅ Sync automático detenido (' + eliminados.length + ' trigger(s) eliminado(s)).'
       : 'No había ningún trigger de sync activo.'
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  SECCIÓN 9 · HOJA DE SEGUIMIENTO DE GRADUADOS
+// ────────────────────────────────────────────────────────────────────────────
+//
+//  Registra a los estudiantes que completan Quinto Bachillerato.
+//  Flujo automático:
+//    1. En la hoja "Quinto Bachillerato [año]", cambia Estado → "Graduando"
+//    2. El trigger onEdit detecta el cambio y pregunta si deseas registrar
+//       al alumno en la hoja "Seguimiento Graduados"
+//    3. También puedes registrar graduados manualmente desde el menú
+//
+// ────────────────────────────────────────────────────────────────────────────
+
+// ── 9.1  Configurar hoja Seguimiento ─────────────────────────────────────────
+
+function setupHojaSeguimiento() {
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  let   hoja = ss.getSheetByName(HOJA_SEGUIMIENTO);
+
+  if (!hoja) {
+    hoja = ss.insertSheet(HOJA_SEGUIMIENTO);
+  } else {
+    hoja.clearFormats();
+    hoja.clearConditionalFormatRules();
+  }
+
+  const anio = new Date().getFullYear();
+
+  // Fila 1: título
+  hoja.getRange(1, 1, 1, 8).merge()
+    .setValue('🎓 SEGUIMIENTO DE GRADUADOS — QUINTO BACHILLERATO')
+    .setBackground(COLOR_HEADER_SEGUIM)
+    .setFontColor(COLOR_FONT_HEADER)
+    .setFontSize(13)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  hoja.setRowHeight(1, 42);
+
+  // Fila 2: encabezados
+  hoja.getRange(2, 1, 1, 8)
+    .setValues([['ID','Nombre Completo','DPI / CUI','No. Teléfono',
+                 'Edad','Año Graduación','Estado Post-Grad','Observaciones']])
+    .setBackground(COLOR_HEADER_SEGUIM)
+    .setFontColor(COLOR_FONT_HEADER)
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  hoja.setRowHeight(2, 28);
+  hoja.setFrozenRows(2);
+
+  // Anchos
+  hoja.setColumnWidth(COL_SEGUIM.ID,          80);
+  hoja.setColumnWidth(COL_SEGUIM.NOMBRE,      220);
+  hoja.setColumnWidth(COL_SEGUIM.DPI,         140);
+  hoja.setColumnWidth(COL_SEGUIM.TELEFONO,    130);
+  hoja.setColumnWidth(COL_SEGUIM.EDAD,         60);
+  hoja.setColumnWidth(COL_SEGUIM.ANIO_GRAD,   120);
+  hoja.setColumnWidth(COL_SEGUIM.ESTADO_POST, 160);
+  hoja.setColumnWidth(COL_SEGUIM.OBSERVACION, 240);
+
+  const MAX = 300;
+
+  // Validación año de graduación
+  hoja.getRange(3, COL_SEGUIM.ANIO_GRAD, MAX, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation()
+      .requireNumberBetween(2000, 2099).setAllowInvalid(false)
+      .setHelpText('Año de graduación (ej. 2026)').build()
+  );
+
+  // Validación estado post-graduación
+  hoja.getRange(3, COL_SEGUIM.ESTADO_POST, MAX, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation()
+      .requireValueInList(ESTADOS_POST_GRAD, true).setAllowInvalid(false)
+      .setHelpText('Estado del graduado').build()
+  );
+
+  // Formato condicional por estado
+  const dr = hoja.getRange(3, 1, MAX, 8);
+  hoja.setConditionalFormatRules([
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$G3="Empleado"')
+      .setBackground('#C8E6C9').setRanges([dr]).build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$G3="Continúa estudiando"')
+      .setBackground('#E3F2FD').setRanges([dr]).build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$G3="Sin contacto"')
+      .setBackground('#FFF9C4').setRanges([dr]).build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$G3="Emigró"')
+      .setBackground('#F3E5F5').setRanges([dr]).build()
+  ]);
+
+  SpreadsheetApp.getUi().alert(
+    '✅ Hoja "' + HOJA_SEGUIMIENTO + '" configurada.\n\n' +
+    'Cuando un alumno de Quinto Bachillerato cambie su\n' +
+    'Estado a "Graduando", se ofrecerá registrarlo aquí\n' +
+    'automáticamente.'
+  );
+}
+
+
+// ── 9.2  Registrar graduado (desde onEdit o manualmente) ─────────────────────
+
+function _ofrecerRegistrarGraduado(hojaGrado, fila) {
+  const ui      = SpreadsheetApp.getUi();
+  const datos   = hojaGrado.getRange(fila, 1, 1, 8).getValues()[0];
+  const nombre  = datos[COL_GRADO.NOMBRE - 1];
+
+  const r = ui.alert(
+    '🎓 ¿Registrar en Seguimiento?',
+    '"' + nombre + '" fue marcado como Graduando.\n\n' +
+    '¿Deseas agregar este graduado a la hoja "' + HOJA_SEGUIMIENTO + '"?',
+    ui.ButtonSet.YES_NO
+  );
+  if (r !== ui.Button.YES) return;
+
+  _escribirGraduado(datos);
+}
+
+function registrarGraduadoManual() {
+  const ui   = SpreadsheetApp.getUi();
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getActiveSheet();
+  const fila = hoja.getActiveCell().getRow();
+
+  if (fila < 3) { ui.alert('Selecciona una fila de alumno (fila 3 o más).'); return; }
+
+  const nombreH = hoja.getName();
+  const esperada = _nombreHoja(GRADO_GRADUACION);
+  if (nombreH !== esperada) {
+    ui.alert(
+      '⚠️ Hoja incorrecta\n\n' +
+      'Navega a la hoja "' + esperada + '" y\n' +
+      'selecciona la fila del graduado.'
+    );
+    return;
+  }
+
+  const datos  = hoja.getRange(fila, 1, 1, 8).getValues()[0];
+  const nombre = datos[COL_GRADO.NOMBRE - 1];
+  if (!nombre) { ui.alert('La fila seleccionada no tiene nombre.'); return; }
+
+  const r = ui.alert(
+    '🎓 Registrar graduado',
+    '¿Registrar a "' + nombre + '" en la hoja "' + HOJA_SEGUIMIENTO + '"?',
+    ui.ButtonSet.YES_NO
+  );
+  if (r !== ui.Button.YES) return;
+
+  _escribirGraduado(datos);
+}
+
+function _escribirGraduado(datosGrado) {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  let   hoja = ss.getSheetByName(HOJA_SEGUIMIENTO);
+  if (!hoja) {
+    setupHojaSeguimiento();
+    hoja = ss.getSheetByName(HOJA_SEGUIMIENTO);
+  }
+
+  const anio        = new Date().getFullYear();
+  const ultimaFila  = Math.max(hoja.getLastRow() + 1, 3);
+  const idGrado     = datosGrado[COL_GRADO.ID - 1];
+  const idSeg       = 'SEG-' + String(ultimaFila - 2).padStart(3, '0');
+
+  hoja.getRange(ultimaFila, 1, 1, 8).setValues([[
+    idSeg,
+    datosGrado[COL_GRADO.NOMBRE    - 1],
+    datosGrado[COL_GRADO.DPI       - 1],
+    datosGrado[COL_GRADO.TELEFONO  - 1],
+    datosGrado[COL_GRADO.EDAD      - 1],
+    anio,
+    'Seguimiento activo',
+    'Graduado de Quinto Bachillerato. ID origen: ' + idGrado
+  ]]);
+
+  hoja.getRange(ultimaFila, 1, 1, 8)
+    .setVerticalAlignment('middle')
+    .setHorizontalAlignment('center');
+  hoja.getRange(ultimaFila, COL_SEGUIM.NOMBRE)
+    .setHorizontalAlignment('left');
+  hoja.getRange(ultimaFila, COL_SEGUIM.OBSERVACION)
+    .setHorizontalAlignment('left');
+  hoja.setRowHeight(ultimaFila, 26);
+
+  ss.toast(
+    datosGrado[COL_GRADO.NOMBRE - 1] + ' agregado a Seguimiento · ID: ' + idSeg,
+    '🎓 Graduado registrado', 5
   );
 }
