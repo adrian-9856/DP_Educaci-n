@@ -8,13 +8,21 @@ Sistema de gestión de inscripciones y salones de clase implementado con **Googl
 
 | Archivo | Descripción |
 |---|---|
-| `Constantes.gs` | Variables globales: nombres de columnas, listas de grados, colores |
-| `Menu.gs` | Menú personalizado "DP Educación" y wrappers de funciones |
-| `HojaInteres.gs` | Configuración de la hoja principal "Interés" |
-| `HojasGrado.gs` | Creación y formato de las hojas de cada grado |
-| `Transferencia.gs` | Lógica de transferencia de estudiantes + resumen |
-| `Triggers.gs` | Instalación del trigger `onEdit` instalable |
+| `Code.gs` | **Archivo único** con todo el código (7 secciones) |
 | `appsscript.json` | Manifiesto del proyecto Apps Script |
+| `.clasp.json` | Configuración para deploy con clasp CLI |
+
+### Secciones dentro de `Code.gs`
+
+| Sección | Contenido |
+|---|---|
+| 1 · Constantes | Variables globales: columnas, grados, colores, listas |
+| 2 · Menú | `onOpen()` y menú "DP Educación" |
+| 3 · Hoja Interés | `setupHojaInteres()`: encabezados, validaciones, formato |
+| 4 · Papelería | Sidebar HTML para multi-selección de documentos |
+| 5 · Hojas de Grado | `crearHojaGrado()`: estructura, formato y validaciones |
+| 6 · Transferencia | `onEdit()` y lógica de movimiento de alumnos |
+| 7 · Triggers | `installTriggers()` / `removeTriggers()` |
 
 ---
 
@@ -97,8 +105,9 @@ Cada hoja se crea con el año actual automáticamente:
 1. Menú **Extensiones → Apps Script**.
 2. Borra el código de `Código.gs` por defecto.
 
-### 3. Crear los archivos `.gs`
-Crea un archivo por cada `.gs` en este repositorio y copia el contenido.
+### 3. Copiar el código
+Abre el archivo **`Code.gs`** de este repositorio y copia **todo** su contenido
+en el editor de Apps Script.
 
 O usa **clasp** (herramienta de línea de comandos):
 ```bash
