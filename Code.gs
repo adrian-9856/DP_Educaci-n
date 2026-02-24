@@ -123,16 +123,16 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(
       ui.createMenu('🌐 KoboToolbox')
-        .addItem('🔑 Configurar token de API',           'koboConfigurarToken')
+        .addItem('🔑 Configurar token de API',              'koboConfigurarToken')
         .addSeparator()
-        .addItem('🔍 Ver columnas disponibles (actual)',  'koboDescubrirColumnasActual')
-        .addItem('🔍 Ver columnas disponibles (hist.)',   'koboDescubrirColumnasHistorico')
+        .addItem('🗺️ Ver hoja de mapeo (actuales)',         'koboVerHojaMapeoActual')
+        .addItem('🗺️ Ver hoja de mapeo (histórico)',        'koboVerHojaMapeoHistorico')
         .addSeparator()
-        .addItem('🔄 Actualizar datos actuales (2025+)',  'koboImportarActual')
-        .addItem('📥 Importar histórico (una sola vez)',  'koboImportarHistorico')
+        .addItem('🔄 Sync a hoja Interés (actuales 2025+)', 'koboSincronizarHojaInteres')
+        .addItem('📥 Importar histórico (una sola vez)',     'koboImportarHistorico')
         .addSeparator()
-        .addItem('🔁 Sync automático (cada hora)',        'koboInstalarTriggerSync')
-        .addItem('⛔ Detener sync automático',            'koboEliminarTriggerSync')
+        .addItem('🔁 Sync automático (cada hora)',           'koboInstalarTriggerSync')
+        .addItem('⛔ Detener sync automático',               'koboEliminarTriggerSync')
     )
     .addToUi();
 }
@@ -596,18 +596,20 @@ function removeTriggers() {
 }
 
 
+
 // ────────────────────────────────────────────────────────────────────────────
 //  SECCIÓN 8 · INTEGRACIÓN KOBOTOOLBOX
 // ────────────────────────────────────────────────────────────────────────────
 //
 //  Flujo de uso:
-//  1. Menú → KoboToolbox → 🔑 Configurar token de API  (una vez)
-//  2. Menú → KoboToolbox → 🔍 Ver columnas disponibles (ajusta KOBO_MAP arriba)
-//  3. Menú → KoboToolbox → 🔄 Actualizar datos actuales
-//     ↳ Descarga el CSV de URL_ACTUAL, reemplaza "Kobo: Interés Actual"
-//  4. Menú → KoboToolbox → 📥 Importar histórico       (solo la 1ª vez)
-//     ↳ Descarga el CSV de URL_HISTORICO, crea "Kobo: Histórico"
-//  5. Opcional: Menú → KoboToolbox → 🔁 Sync automático (cada hora)
+//  1. Menú → KoboToolbox → 🔑 Configurar token de API  (una sola vez)
+//  2. Menú → KoboToolbox → 🗺️ Ver hoja de mapeo
+//     ↳ Crea la hoja "Kobo: Mapeo" con todas las columnas y ejemplos
+//     ↳ Ajusta KOBO_MAP en Sección 1 con los nombres exactos que veas ahí
+//  3. Menú → KoboToolbox → 🔄 Sync a hoja Interés
+//     ↳ Agrega solo registros nuevos (deduplica por DPI)
+//  4. Menú → KoboToolbox → 📥 Importar histórico  (una sola vez)
+//  5. Opcional: 🔁 Sync automático (cada hora)
 //
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -617,30 +619,27 @@ function koboConfigurarToken() {
   const ui  = SpreadsheetApp.getUi();
   const res = ui.prompt(
     '🔑 Token de API — KoboToolbox',
-    'Pega aquí tu token (lo encontrarás en kf.kobotoolbox.org → ícono de usuario → API Key).\n\n' +
-    'Se guardará de forma segura en Script Properties (no en el código).',
+    'Pega aquí tu token.\n(kf.kobotoolbox.org → ícono de usuario → API Key)\n\n' +
+    'Se guarda en Script Properties, no en el código.',
     ui.ButtonSet.OK_CANCEL
   );
   if (res.getSelectedButton() !== ui.Button.OK) return;
-
   const token = res.getResponseText().trim();
   if (!token) { ui.alert('Token vacío. No se guardó nada.'); return; }
-
   PropertiesService.getScriptProperties().setProperty(PROP_KOBO_TOKEN, token);
-  ui.alert('✅ Token guardado.\n\nYa puedes usar las opciones de importación.');
+  ui.alert('✅ Token guardado.\nYa puedes usar las opciones de importación.');
 }
 
 function _koboGetToken() {
   const token = PropertiesService.getScriptProperties().getProperty(PROP_KOBO_TOKEN);
   if (!token) throw new Error(
-    'No hay token configurado.\n\n' +
-    'Ve a: DP Educación → KoboToolbox → 🔑 Configurar token de API'
+    'No hay token configurado.\nVe a: DP Educación → 🌐 KoboToolbox → 🔑 Configurar token de API'
   );
   return token;
 }
 
 
-// ── 8.2  Descarga y parseo de CSV ────────────────────────────────────────────
+// ── 8.2  Descarga del CSV ─────────────────────────────────────────────────────
 
 function _koboFetchCsv(url) {
   const token = _koboGetToken();
@@ -648,39 +647,56 @@ function _koboFetchCsv(url) {
     headers:            { Authorization: 'Token ' + token },
     muteHttpExceptions: true
   });
-
   const code = resp.getResponseCode();
   if (code === 401 || code === 403) throw new Error(
     'Error ' + code + ': token inválido o sin permisos.\n' +
-    'Ve a: DP Educación → KoboToolbox → 🔑 Configurar token de API'
+    'Ve a: DP Educación → 🌐 KoboToolbox → 🔑 Configurar token de API'
   );
-  if (code !== 200) throw new Error(
-    'Error al descargar el CSV (HTTP ' + code + ').\nURL: ' + url
-  );
-
+  if (code !== 200) throw new Error('Error al descargar el CSV (HTTP ' + code + ').');
   return resp.getContentText('UTF-8');
 }
 
+
+// ── 8.3  Parser CSV con detección automática de separador ────────────────────
+
 /**
- * Parsea un CSV respetando campos entre comillas con comas internas.
+ * Detecta si el CSV usa coma (,) o punto y coma (;) como separador.
+ * Compara cuántos de cada tipo hay en la primera línea fuera de comillas.
+ */
+function _koboDetectarSeparador(primeraLinea) {
+  let comas = 0, puntoYComas = 0, inQ = false;
+  for (let i = 0; i < primeraLinea.length; i++) {
+    const c = primeraLinea[i];
+    if (c === '"') { inQ = !inQ; continue; }
+    if (inQ) continue;
+    if (c === ',')  comas++;
+    if (c === ';')  puntoYComas++;
+  }
+  return puntoYComas >= comas ? ';' : ',';
+}
+
+/**
+ * Parsea un CSV respetando campos entre comillas.
+ * Auto-detecta separador (coma o punto y coma).
  * Devuelve un array 2D: [[col1, col2, ...], [val1, val2, ...], ...]
  */
 function _koboParseCsv(text) {
-  const rows   = [];
-  const lines  = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+                    .filter(function(l) { return l.trim() !== ''; });
+  if (!lines.length) return [];
+
+  const sep  = _koboDetectarSeparador(lines[0]);
+  const rows = [];
 
   lines.forEach(function(line) {
-    if (line.trim() === '') return;
     const cols = [];
-    let cur    = '';
-    let inQ    = false;
-
+    let cur = '', inQ = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
       if (c === '"') {
         if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
         else inQ = !inQ;
-      } else if (c === ',' && !inQ) {
+      } else if (c === sep && !inQ) {
         cols.push(cur.trim()); cur = '';
       } else {
         cur += c;
@@ -694,49 +710,110 @@ function _koboParseCsv(text) {
 }
 
 
-// ── 8.3  Ver columnas disponibles ────────────────────────────────────────────
+// ── 8.4  Hoja de mapeo visual ─────────────────────────────────────────────────
+//
+//  Crea "Kobo: Mapeo" con una fila por cada columna del CSV:
+//  Índice | Nombre del campo | Ejemplo 1 | Ejemplo 2 | Ejemplo 3 | Mapeo actual
+//  Así puedes identificar los campos y ajustar KOBO_MAP en Sección 1.
 
-function koboDescubrirColumnasActual()    { _koboMostrarColumnas(KOBO_URL_ACTUAL,    'Datos actuales (2025+)'); }
-function koboDescubrirColumnasHistorico() { _koboMostrarColumnas(KOBO_URL_HISTORICO, 'Histórico'); }
+function koboVerHojaMapeoActual()    { _koboCrearHojaMapeo(KOBO_URL_ACTUAL,    'actual');    }
+function koboVerHojaMapeoHistorico() { _koboCrearHojaMapeo(KOBO_URL_HISTORICO, 'histórico'); }
 
-function _koboMostrarColumnas(url, etiqueta) {
+function _koboCrearHojaMapeo(url, etiqueta) {
   const ui = SpreadsheetApp.getUi();
   try {
     const csv  = _koboFetchCsv(url);
     const rows = _koboParseCsv(csv);
-    if (!rows.length) { ui.alert('El CSV está vacío.'); return; }
+    if (rows.length < 1) { ui.alert('El CSV está vacío.'); return; }
 
-    const headers = rows[0];
-    const total   = rows.length - 1;
+    const headers  = rows[0];
+    const muestra1 = rows.length > 1 ? rows[1] : [];
+    const muestra2 = rows.length > 2 ? rows[2] : [];
+    const muestra3 = rows.length > 3 ? rows[3] : [];
 
-    let msg = '📋 COLUMNAS — ' + etiqueta + '\n';
-    msg += '(' + total + ' registros, ' + headers.length + ' columnas)\n';
-    msg += '─'.repeat(40) + '\n\n';
-    headers.forEach(function(h, i) {
-      msg += (i + 1) + '. ' + h + '\n';
+    // Invertir KOBO_MAP para búsqueda rápida: valor → clave
+    const mapaInvertido = {};
+    Object.keys(KOBO_MAP).forEach(function(k) {
+      mapaInvertido[KOBO_MAP[k]] = k;
     });
-    msg += '\n─'.repeat(40) + '\n';
-    msg += '💡 Copia los nombres exactos en el objeto KOBO_MAP\n';
-    msg += '   (Sección 1 de Code.gs) para activar la sincronización.';
 
-    ui.alert('Columnas KoboToolbox', msg, ui.ButtonSet.OK);
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const nombre = 'Kobo: Mapeo (' + etiqueta + ')';
+    let hoja   = ss.getSheetByName(nombre);
+    if (!hoja) hoja = ss.insertSheet(nombre);
+    else hoja.clearContents();
+
+    // Fila de título
+    hoja.getRange(1, 1, 1, 6).merge()
+      .setValue('🗺️ MAPEO DE COLUMNAS KOBO — ' + etiqueta.toUpperCase() +
+                '  |  ' + (rows.length - 1) + ' registros  |  ' + headers.length + ' columnas')
+      .setBackground(COLOR_HEADER_KOBO)
+      .setFontColor(COLOR_FONT_HEADER)
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center')
+      .setVerticalAlignment('middle');
+    hoja.setRowHeight(1, 36);
+
+    // Encabezados de la hoja de mapeo
+    const encabezadosMapeo = ['#', 'Nombre del campo (Kobo)', 'Ejemplo 1', 'Ejemplo 2', 'Ejemplo 3', 'Mapea a Interés →'];
+    hoja.getRange(2, 1, 1, 6).setValues([encabezadosMapeo])
+      .setBackground(COLOR_HEADER_KOBO)
+      .setFontColor(COLOR_FONT_HEADER)
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center');
+    hoja.setRowHeight(2, 26);
+    hoja.setFrozenRows(2);
+
+    // Una fila por columna del CSV
+    const filas = headers.map(function(h, i) {
+      const mapeo = mapaInvertido[h] ? '→ ' + mapaInvertido[h] : '';
+      return [
+        i + 1,
+        h,
+        muestra1[i] !== undefined ? muestra1[i] : '',
+        muestra2[i] !== undefined ? muestra2[i] : '',
+        muestra3[i] !== undefined ? muestra3[i] : '',
+        mapeo
+      ];
+    });
+    hoja.getRange(3, 1, filas.length, 6).setValues(filas);
+
+    // Resaltar filas que ya están mapeadas
+    filas.forEach(function(f, idx) {
+      if (f[5]) {
+        hoja.getRange(idx + 3, 1, 1, 6).setBackground('#E8F5E9');
+      }
+    });
+
+    // Anchos
+    hoja.setColumnWidth(1, 45);
+    hoja.setColumnWidth(2, 280);
+    hoja.setColumnWidth(3, 200);
+    hoja.setColumnWidth(4, 200);
+    hoja.setColumnWidth(5, 200);
+    hoja.setColumnWidth(6, 170);
+
+    ss.setActiveSheet(hoja);
+    ss.toast(
+      'Revisa la columna "Nombre del campo" y actualiza KOBO_MAP en Sección 1.',
+      '🗺️ Hoja de mapeo lista', 8
+    );
   } catch (err) {
     ui.alert('❌ Error\n\n' + err.message);
   }
 }
 
 
-// ── 8.4  Importar datos actuales (2025+) → "Kobo: Interés Actual" ────────────
+// ── 8.5  Sincronizar datos actuales → hoja "Interés" ─────────────────────────
+//
+//  - Descarga el CSV de KOBO_URL_ACTUAL
+//  - Para cada fila Kobo, extrae solo los campos de KOBO_MAP
+//  - Si el DPI ya existe en la hoja Interés → lo omite (sin duplicados)
+//  - Si no existe → agrega la fila al final
 
-function koboImportarActual() {
+function koboSincronizarHojaInteres() {
   const ui = SpreadsheetApp.getUi();
   try {
-    ui.alert(
-      '⏳ Descargando datos...',
-      'Esto puede tardar unos segundos. Haz clic en OK para continuar.',
-      ui.ButtonSet.OK
-    );
-
     const csv  = _koboFetchCsv(KOBO_URL_ACTUAL);
     const rows = _koboParseCsv(csv);
 
@@ -745,73 +822,133 @@ function koboImportarActual() {
       return;
     }
 
-    const ss    = SpreadsheetApp.getActiveSpreadsheet();
-    let   hoja  = ss.getSheetByName(HOJA_KOBO_ACTUAL);
-    if (!hoja) {
-      hoja = ss.insertSheet(HOJA_KOBO_ACTUAL);
-    } else {
-      hoja.clearContents();
-      hoja.clearFormats();
-      hoja.clearConditionalFormatRules();
+    const headers = rows[0];
+
+    // Índices de los campos mapeados en el CSV (busca por nombre)
+    const idx = {};
+    Object.keys(KOBO_MAP).forEach(function(campo) {
+      const nombreKobo = KOBO_MAP[campo];
+      const pos        = headers.indexOf(nombreKobo);
+      idx[campo]       = pos; // -1 si no se encuentra
+    });
+
+    // Campos no encontrados
+    const noEncontrados = Object.keys(idx).filter(function(k) { return idx[k] < 0; });
+    if (noEncontrados.length > 0) {
+      const aviso = noEncontrados.map(function(k) {
+        return '  • ' + k + ' → buscando "' + KOBO_MAP[k] + '" (no encontrado)';
+      }).join('\n');
+      const r = ui.alert(
+        '⚠️ Campos no encontrados en el CSV',
+        'Los siguientes campos de KOBO_MAP no se encontraron en el CSV:\n\n' + aviso +
+        '\n\nEjecuta "🗺️ Ver hoja de mapeo" para ver los nombres exactos.\n\n' +
+        '¿Continuar de todas formas con los campos que sí se encontraron?',
+        ui.ButtonSet.YES_NO
+      );
+      if (r !== ui.Button.YES) return;
     }
 
-    // Escribir todo el CSV de una vez (más rápido)
-    hoja.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-
-    // Formato encabezado
-    _koboFormatearHoja(hoja, rows[0].length,
-      '📥 KOBO: INTERÉS ACTUAL  ·  Actualizado: ' + new Date().toLocaleString('es-GT'));
-
-    // Ordenar por la 1ª columna (normalmente _id o fecha)
-    if (rows.length > 2) {
-      hoja.getRange(2, 1, rows.length - 1, rows[0].length).sort({ column: 1, ascending: false });
+    const ss          = SpreadsheetApp.getActiveSpreadsheet();
+    const hojaInteres = ss.getSheetByName(HOJA_INTERES);
+    if (!hojaInteres) {
+      ui.alert('❌ La hoja "Interés" no existe. Ejecuta primero "⚙️ Configurar hoja Interés".');
+      return;
     }
 
+    // DPIs que ya existen en la hoja Interés (para no duplicar)
+    const ultimaFilaI  = hojaInteres.getLastRow();
+    const dpisExistentes = new Set();
+    if (ultimaFilaI >= 2) {
+      hojaInteres.getRange(2, COL_INTERES.DPI, ultimaFilaI - 1, 1)
+        .getValues().flat()
+        .forEach(function(d) { if (d !== '') dpisExistentes.add(String(d).trim()); });
+    }
+
+    // Procesar filas Kobo
+    const filasNuevas = [];
+    rows.slice(1).forEach(function(row) {
+      const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
+      if (dpi && dpisExistentes.has(dpi)) return; // ya existe
+
+      const nombre    = idx.NOMBRE      >= 0 ? (row[idx.NOMBRE]      || '') : '';
+      const edad      = idx.EDAD        >= 0 ? (row[idx.EDAD]        || '') : '';
+      const ultimoA   = idx.ULTIMO_ANIO >= 0 ? (row[idx.ULTIMO_ANIO] || '') : '';
+      const papeleria = idx.PAPELERIA   >= 0 ? (row[idx.PAPELERIA]   || '') : '';
+      const comentario= idx.COMENTARIO  >= 0 ? (row[idx.COMENTARIO]  || '') : '';
+
+      if (!nombre && !dpi) return; // fila vacía
+
+      filasNuevas.push([
+        String(nombre).trim(),
+        String(edad).trim(),
+        dpi,
+        String(ultimoA).trim(),
+        String(papeleria).trim(),
+        String(comentario).trim(),
+        '-- Seleccionar --'
+      ]);
+
+      if (dpi) dpisExistentes.add(dpi); // prevenir duplicados dentro del mismo lote
+    });
+
+    if (!filasNuevas.length) {
+      ui.alert('✅ Sin novedades\n\nTodos los registros de KoboToolbox ya existen en la hoja "Interés".');
+      return;
+    }
+
+    // Escribir al final de la hoja Interés
+    const primeraFilaLibre = Math.max(hojaInteres.getLastRow() + 1, 2);
+    hojaInteres.getRange(primeraFilaLibre, 1, filasNuevas.length, 7).setValues(filasNuevas);
+
+    // Aplicar validación de Acción a las nuevas filas
+    const validAccion = SpreadsheetApp.newDataValidation()
+      .requireValueInList(ACCIONES, true).setAllowInvalid(false).build();
+    hojaInteres.getRange(primeraFilaLibre, COL_INTERES.ACCION, filasNuevas.length, 1)
+      .setDataValidation(validAccion);
+
+    // Validación Último año
+    const validAnio = SpreadsheetApp.newDataValidation()
+      .requireValueInList(ULTIMO_ANIO_OPCIONES, true).setAllowInvalid(false).build();
+    hojaInteres.getRange(primeraFilaLibre, COL_INTERES.ULTIMO_ANIO, filasNuevas.length, 1)
+      .setDataValidation(validAnio);
+
+    ss.setActiveSheet(hojaInteres);
     ss.toast(
-      (rows.length - 1) + ' registros importados desde KoboToolbox.',
-      '✅ Datos actuales actualizados', 6
+      filasNuevas.length + ' nuevos registros agregados desde KoboToolbox.',
+      '✅ Sync completado', 7
     );
     ui.alert(
-      '✅ Importación completada\n\n' +
-      'Registros: ' + (rows.length - 1) + '\n' +
-      'Columnas:  ' + rows[0].length + '\n' +
-      'Hoja:      "' + HOJA_KOBO_ACTUAL + '"\n\n' +
-      '💡 Si las columnas de KOBO_MAP coinciden, puedes sincronizar\n' +
-      'directamente a la hoja "Interés" con "Procesar acciones pendientes".'
+      '✅ Sincronización completada\n\n' +
+      'Registros nuevos agregados: ' + filasNuevas.length + '\n' +
+      'Registros ya existentes:    ' + (rows.length - 1 - filasNuevas.length) + '\n\n' +
+      '💡 Revisa la columna "Acción" para asignar los alumnos nuevos a su grado.'
     );
 
   } catch (err) {
-    ui.alert('❌ Error al importar\n\n' + err.message);
+    ui.alert('❌ Error en sincronización\n\n' + err.message);
   }
 }
 
 
-// ── 8.5  Importar histórico (una sola vez) → "Kobo: Histórico" ───────────────
+// ── 8.6  Importar histórico → "Kobo: Histórico" ──────────────────────────────
 
 function koboImportarHistorico() {
   const ui = SpreadsheetApp.getUi();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Advertir si ya existe
   const hojaExistente = ss.getSheetByName(HOJA_KOBO_HISTORICO);
   if (hojaExistente) {
     const r = ui.alert(
       'Hoja ya existe',
       '"' + HOJA_KOBO_HISTORICO + '" ya existe con ' +
-      Math.max(hojaExistente.getLastRow() - 1, 0) + ' registros.\n\n' +
-      '¿Deseas reemplazarla con los datos más recientes?',
+      Math.max(hojaExistente.getLastRow() - 2, 0) + ' registros.\n\n' +
+      '¿Reemplazar con los datos más recientes?',
       ui.ButtonSet.YES_NO
     );
     if (r !== ui.Button.YES) return;
   }
 
   try {
-    ui.alert(
-      '⏳ Descargando histórico...',
-      'Los datos históricos pueden ser grandes. Haz clic en OK para continuar.',
-      ui.ButtonSet.OK
-    );
-
     const csv  = _koboFetchCsv(KOBO_URL_HISTORICO);
     const rows = _koboParseCsv(csv);
 
@@ -829,33 +966,23 @@ function koboImportarHistorico() {
       hoja.clearConditionalFormatRules();
     }
 
-    // Escribir
     hoja.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
-
-    // Formato
-    _koboFormatearHoja(hoja, rows[0].length,
+    _koboFormatearHojaRaw(hoja, rows[0].length,
       '📚 KOBO: HISTÓRICO  ·  Importado: ' + new Date().toLocaleString('es-GT'));
 
-    // Ordenar descendente por col 1
     if (rows.length > 2) {
-      hoja.getRange(2, 1, rows.length - 1, rows[0].length).sort({ column: 1, ascending: false });
+      hoja.getRange(3, 1, rows.length - 1, rows[0].length).sort({ column: 1, ascending: false });
     }
 
-    // Proteger: solo lectura para evitar ediciones accidentales
-    const proteccion = hoja.protect().setDescription('Datos históricos — solo lectura');
-    proteccion.setWarningOnly(true);
+    hoja.protect().setDescription('Datos históricos — solo lectura').setWarningOnly(true);
 
-    ss.toast(
-      (rows.length - 1) + ' registros históricos importados.',
-      '✅ Histórico importado', 6
-    );
+    ss.toast((rows.length - 1) + ' registros históricos importados.', '✅ Histórico listo', 6);
     ui.alert(
-      '✅ Histórico importado correctamente\n\n' +
+      '✅ Histórico importado\n\n' +
       'Registros: ' + (rows.length - 1) + '\n' +
       'Columnas:  ' + rows[0].length + '\n' +
       'Hoja:      "' + HOJA_KOBO_HISTORICO + '"\n\n' +
-      '⚠️ La hoja tiene protección de advertencia para evitar\n' +
-      'modificaciones accidentales. Es de solo consulta.'
+      '⚠️ Hoja protegida (solo lectura).'
     );
 
   } catch (err) {
@@ -864,13 +991,12 @@ function koboImportarHistorico() {
 }
 
 
-// ── 8.6  Formato visual de hojas Kobo ────────────────────────────────────────
+// ── 8.7  Formato visual de hojas Kobo (datos crudos) ─────────────────────────
 
-function _koboFormatearHoja(hoja, numCols, titulo) {
-  const MAX = hoja.getLastRow();
-
-  // Título en fila 1 (encima de los datos)
+function _koboFormatearHojaRaw(hoja, numCols, titulo) {
   hoja.insertRowBefore(1);
+  hoja.insertRowBefore(1);
+
   hoja.getRange(1, 1, 1, numCols).merge()
     .setValue(titulo)
     .setBackground(COLOR_HEADER_KOBO)
@@ -881,66 +1007,46 @@ function _koboFormatearHoja(hoja, numCols, titulo) {
     .setVerticalAlignment('middle');
   hoja.setRowHeight(1, 36);
 
-  // Encabezados en fila 2
   hoja.getRange(2, 1, 1, numCols)
     .setBackground(COLOR_HEADER_KOBO)
     .setFontColor(COLOR_FONT_HEADER)
     .setFontWeight('bold')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
-  hoja.setRowHeight(2, 28);
+  hoja.setRowHeight(2, 26);
   hoja.setFrozenRows(2);
 
-  // Alternar colores de fila para legibilidad
-  if (MAX > 2) {
-    for (let f = 3; f <= MAX + 1; f++) {
-      hoja.getRange(f, 1, 1, numCols)
-        .setBackground(f % 2 === 0 ? '#F3E5F5' : '#FFFFFF');
-    }
-  }
-
-  // Auto-ajuste de columnas (máx 300 px)
   hoja.autoResizeColumns(1, numCols);
   for (let c = 1; c <= numCols; c++) {
-    if (hoja.getColumnWidth(c) > 300) hoja.setColumnWidth(c, 300);
+    if (hoja.getColumnWidth(c) > 280) hoja.setColumnWidth(c, 280);
   }
 }
 
 
-// ── 8.7  Trigger automático de sincronización ─────────────────────────────────
+// ── 8.8  Trigger automático de sincronización ─────────────────────────────────
 
 function koboInstalarTriggerSync() {
   const ui = SpreadsheetApp.getUi();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  try { _koboGetToken(); } catch (e) { ui.alert('❌ ' + e.message); return; }
 
-  // Verificar token antes de instalar
-  try { _koboGetToken(); } catch (e) {
-    ui.alert('❌ ' + e.message);
-    return;
-  }
-
-  // Eliminar triggers previos del mismo handler
   ScriptApp.getProjectTriggers()
-    .filter(function(t) { return t.getHandlerFunction() === 'koboImportarActual'; })
+    .filter(function(t) { return t.getHandlerFunction() === 'koboSincronizarHojaInteres'; })
     .forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
-  ScriptApp.newTrigger('koboImportarActual')
-    .forSpreadsheet(ss)
-    .timeBased()
-    .everyHours(1)
-    .create();
+  ScriptApp.newTrigger('koboSincronizarHojaInteres')
+    .timeBased().everyHours(1).create();
 
   ui.alert(
     '✅ Sync automático activado\n\n' +
-    'La hoja "' + HOJA_KOBO_ACTUAL + '" se actualizará cada hora\n' +
-    'automáticamente desde KoboToolbox.\n\n' +
-    'Para detenerlo: menú → KoboToolbox → ⛔ Detener sync automático'
+    'Cada hora se agregarán automáticamente los registros nuevos de\n' +
+    'KoboToolbox a la hoja "Interés".\n\n' +
+    'Para detenerlo: menú → 🌐 KoboToolbox → ⛔ Detener sync automático'
   );
 }
 
 function koboEliminarTriggerSync() {
   const eliminados = ScriptApp.getProjectTriggers()
-    .filter(function(t) { return t.getHandlerFunction() === 'koboImportarActual'; });
+    .filter(function(t) { return t.getHandlerFunction() === 'koboSincronizarHojaInteres'; });
 
   eliminados.forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
