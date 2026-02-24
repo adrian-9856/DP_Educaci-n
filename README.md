@@ -8,7 +8,7 @@ Sistema de gestión de inscripciones y salones de clase implementado con **Googl
 
 | Archivo | Descripción |
 |---|---|
-| `Code.gs` | **Archivo único** con todo el código (7 secciones) |
+| `Code.gs` | **Archivo único** con todo el código (8 secciones) |
 | `appsscript.json` | Manifiesto del proyecto Apps Script |
 | `.clasp.json` | Configuración para deploy con clasp CLI |
 
@@ -16,13 +16,37 @@ Sistema de gestión de inscripciones y salones de clase implementado con **Googl
 
 | Sección | Contenido |
 |---|---|
-| 1 · Constantes | Variables globales: columnas, grados, colores, listas |
-| 2 · Menú | `onOpen()` y menú "DP Educación" |
+| 1 · Constantes | Variables globales: columnas, grados, colores, listas, URLs Kobo |
+| 2 · Menú | `onOpen()` y menú "DP Educación" (incluye submenú KoboToolbox) |
 | 3 · Hoja Interés | `setupHojaInteres()`: encabezados, validaciones, formato |
 | 4 · Papelería | Sidebar HTML para multi-selección de documentos |
 | 5 · Hojas de Grado | `crearHojaGrado()`: estructura, formato y validaciones |
 | 6 · Transferencia | `onEdit()` y lógica de movimiento de alumnos |
 | 7 · Triggers | `installTriggers()` / `removeTriggers()` |
+| 8 · KoboToolbox | Descarga CSV, importación y sync automático desde KoboToolbox |
+
+---
+
+## Integración KoboToolbox
+
+Dos fuentes de datos se importan directamente desde KoboToolbox vía API:
+
+| Fuente | Asset ID | Hoja destino | Frecuencia |
+|---|---|---|---|
+| Datos actuales (2025+) | `auvEELWQEgiwF54W4pGpV5` | `Kobo: Interés Actual` | Cada hora (automático) |
+| Histórico (hasta 2024) | `akz5K2bGfvvisQaE7VaHev` | `Kobo: Histórico` | Una sola vez |
+
+### Pasos de configuración
+
+1. **Token**: menú → 🌐 KoboToolbox → 🔑 Configurar token de API
+2. **Ver columnas**: menú → 🌐 KoboToolbox → 🔍 Ver columnas disponibles
+3. **Ajustar mapeo**: edita `KOBO_MAP` en la Sección 1 de `Code.gs` con los nombres exactos de los campos
+4. **Importar**: menú → 🌐 KoboToolbox → 🔄 Actualizar datos actuales
+5. **Histórico**: menú → 🌐 KoboToolbox → 📥 Importar histórico *(solo la 1ª vez)*
+6. **Auto-sync**: menú → 🌐 KoboToolbox → 🔁 Sync automático (cada hora)
+
+> **Token API**: se obtiene en `kf.kobotoolbox.org` → ícono de usuario → API Key.
+> Se guarda en **Script Properties** (no en el código ni en el repositorio).
 
 ---
 
@@ -158,15 +182,20 @@ Documentos disponibles:
 
 ```
 DP Educación
-  ├── ⚙️ Configurar hoja Interés
+  ├── ⚙️  Configurar hoja Interés
+  ├── 🔧  Instalar trigger automático
   ├── 📚 Crear hoja de grado
-  │     ├── Primero Básico
-  │     ├── Segundo Básico
-  │     ├── Tercero Básico
-  │     ├── Cuarto Bachillerato
-  │     ├── Quinto Bachillerato
-  │     ├── Sexto Bachillerato
-  │     └── Crear TODOS los grados
+  │     ├── Primero Básico … Sexto Bachillerato
+  │     └── ✨ Crear TODOS los grados
+  ├── 📋 Seleccionar papelería faltante
   ├── 🔄 Procesar acciones pendientes
-  └── 📋 Ver resumen de alumnos
+  ├── 📊 Ver resumen de alumnos
+  └── 🌐 KoboToolbox
+        ├── 🔑 Configurar token de API
+        ├── 🔍 Ver columnas disponibles (actual)
+        ├── 🔍 Ver columnas disponibles (hist.)
+        ├── 🔄 Actualizar datos actuales (2025+)
+        ├── 📥 Importar histórico (una sola vez)
+        ├── 🔁 Sync automático (cada hora)
+        └── ⛔ Detener sync automático
 ```
