@@ -205,8 +205,10 @@ const ESTADOS_POST_GRAD = [
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('DP Educación')
-    .addItem('⚙️  Configurar hoja Interés',      'setupHojaInteres')
-    .addItem('🔧  Instalar trigger automático',   'installTriggers')
+    .addItem('📖  Guía de uso',                    'mostrarGuiaDeUso')
+    .addSeparator()
+    .addItem('⚙️  Configurar hoja Interés',        'setupHojaInteres')
+    .addItem('🔧  Instalar trigger automático',     'installTriggers')
     .addSeparator()
     .addSubMenu(
       ui.createMenu('📚 Crear hoja de grado')
@@ -237,6 +239,8 @@ function onOpen() {
         .addItem('🔁 Sync automático (cada hora)',   'koboInstalarTriggerSync')
         .addItem('⛔ Detener sync automático',        'koboEliminarTriggerSync')
     )
+    .addSeparator()
+    .addItem('🔁 Reiniciar sistema (⚠️ borra todo)', 'reiniciarSistema')
     .addToUi();
 }
 
@@ -464,10 +468,10 @@ function _siguienteGrado(grado) {
   return idx >= 0 && idx < GRADOS.length - 1 ? GRADOS[idx + 1] : null;
 }
 
-function crearHojaGrado(grado, silencioso) {
+function crearHojaGrado(grado, silencioso, anio) {
   if (silencioso === undefined) silencioso = false;
   const ss     = SpreadsheetApp.getActiveSpreadsheet();
-  const nombre = _nombreHoja(grado);
+  const nombre = _nombreHoja(grado, anio);  // usa anio si se especifica, si no SCHOOL_YEAR
   let   hoja   = ss.getSheetByName(nombre);
   const ui     = SpreadsheetApp.getUi();
 
@@ -478,19 +482,19 @@ function crearHojaGrado(grado, silencioso) {
         ui.ButtonSet.YES_NO);
       if (r !== ui.Button.YES) return hoja;
     }
-    _formatearHojaGrado(hoja, grado);
+    _formatearHojaGrado(hoja, grado, anio);
     if (!silencioso) ui.alert('✅ "' + nombre + '" reformateada.');
     return hoja;
   }
 
   hoja = ss.insertSheet(nombre);
-  _formatearHojaGrado(hoja, grado);
-  if (!silencioso) ui.alert('✅ Hoja "' + nombre + '" creada.\n\nAño: ' + new Date().getFullYear());
+  _formatearHojaGrado(hoja, grado, anio);
+  if (!silencioso) ui.alert('✅ Hoja "' + nombre + '" creada.\n\nAño: ' + (anio || SCHOOL_YEAR));
   return hoja;
 }
 
-function _formatearHojaGrado(hoja, grado) {
-  const anio    = SCHOOL_YEAR;
+function _formatearHojaGrado(hoja, grado, anio) {
+  anio = anio || SCHOOL_YEAR;
   const MAX     = 300;
   const esQuinto = grado === GRADO_GRADUACION;
   const estados  = esQuinto ? ESTADOS_QUINTO : ESTADOS;
@@ -686,27 +690,31 @@ function _transferirEstudiante(fila, grado) {
 }
 
 // ── Ofrecer avanzar al siguiente grado (al marcar Graduadx) ──────────────────
+// Al graduarse, el estudiante pasa al SIGUIENTE grado en el AÑO SIGUIENTE.
+// La fila actual queda oculta (el registro histórico no se borra).
 function _ofrecerAvanzarSiguienteGrado(hojaActual, fila, gradoActual) {
   const siguienteGrado = _siguienteGrado(gradoActual);
   if (!siguienteGrado) return; // no hay siguiente
 
-  const ui     = SpreadsheetApp.getUi();
-  const ss     = SpreadsheetApp.getActiveSpreadsheet();
-  const datos  = hojaActual.getRange(fila, 1, 1, 9).getValues()[0];
-  const nombre = datos[COL_GRADO.NOMBRE - 1];
+  const ui          = SpreadsheetApp.getUi();
+  const ss          = SpreadsheetApp.getActiveSpreadsheet();
+  const datos       = hojaActual.getRange(fila, 1, 1, 9).getValues()[0];
+  const nombre      = datos[COL_GRADO.NOMBRE - 1];
+  const anioSig     = SCHOOL_YEAR + 1; // siempre el año siguiente
 
   const r = ui.alert(
     '🎓 ¿Avanzar al siguiente grado?',
-    '"' + nombre + '" fue marcado como Graduadx en\n"' + gradoActual + '".\n\n' +
-    '¿Crear inscripción en:\n"' + siguienteGrado + ' ' + SCHOOL_YEAR + '"?',
+    '"' + nombre + '" fue marcado como Graduadx en\n"' + gradoActual + ' ' + SCHOOL_YEAR + '".\n\n' +
+    '¿Crear inscripción en:\n"' + siguienteGrado + ' ' + anioSig + '"?\n\n' +
+    '(La fila actual quedará oculta — los datos se conservan)',
     ui.ButtonSet.YES_NO
   );
   if (r !== ui.Button.YES) return;
 
-  // Crear la hoja del siguiente grado si no existe
-  const nombreSig = _nombreHoja(siguienteGrado);
+  // Crear la hoja del siguiente grado (año siguiente) si no existe
+  const nombreSig = _nombreHoja(siguienteGrado, anioSig);
   let   hojaSig   = ss.getSheetByName(nombreSig);
-  if (!hojaSig) hojaSig = crearHojaGrado(siguienteGrado, true);
+  if (!hojaSig) hojaSig = crearHojaGrado(siguienteGrado, true, anioSig);
 
   const filaDestino = Math.max(hojaSig.getLastRow() + 1, 3);
   const id          = _siguienteId(hojaSig, siguienteGrado);
@@ -726,6 +734,9 @@ function _ofrecerAvanzarSiguienteGrado(hojaActual, fila, gradoActual) {
     .setVerticalAlignment('middle').setHorizontalAlignment('center');
   hojaSig.getRange(filaDestino, COL_GRADO.NOMBRE).setHorizontalAlignment('left');
   hojaSig.setRowHeight(filaDestino, 26);
+
+  // Ocultar la fila original (historial conservado, vista limpia)
+  hojaActual.hideRows(fila);
 
   ss.toast('"' + nombre + '" → "' + nombreSig + '" · ID: ' + id, '✅ Avanzado', 5);
 }
@@ -811,7 +822,7 @@ function cerrarCicloEscolar() {
   );
   if (r !== ui.Button.YES) return;
 
-  let totalMovidos = 0, totalOcultos = 0;
+  let totalMovidos = 0, totalHojasArchivadas = 0;
 
   GRADOS.forEach(function(grado) {
     const nombreAnt = _nombreHoja(grado, anioAnt);
@@ -819,17 +830,21 @@ function cerrarCicloEscolar() {
     if (!hojaAnt) return; // no existía este grado el año pasado
 
     const ultimaFila = hojaAnt.getLastRow();
-    if (ultimaFila < 3) return;
+    if (ultimaFila < 3) {
+      // Hoja vacía → archivar igualmente
+      hojaAnt.hideSheet();
+      totalHojasArchivadas++;
+      return;
+    }
 
     const datos = hojaAnt.getRange(3, 1, ultimaFila - 2, 9).getValues();
 
     datos.forEach(function(row, i) {
-      const fila   = i + 3;
       const estado = String(row[COL_GRADO.ESTADO - 1] || '').trim();
       const nombre = String(row[COL_GRADO.NOMBRE - 1] || '').trim();
       if (!nombre) return;
 
-      // Estudiantes que no completaron el ciclo → mover al mismo grado 2027
+      // Estudiantes que no completaron el ciclo → mover al mismo grado año nuevo
       if (estado === 'Inscritx' || estado === 'Retiradx') {
         const nombreNvo = _nombreHoja(grado, SCHOOL_YEAR);
         let   hojaNva   = ss.getSheetByName(nombreNvo);
@@ -855,20 +870,181 @@ function cerrarCicloEscolar() {
         hojaNva.setRowHeight(filaDestino, 26);
         totalMovidos++;
       }
-
-      // Ocultar la fila en la hoja del año anterior
-      hojaAnt.hideRows(fila);
-      totalOcultos++;
+      // Nota: filas Graduadx/CVT ya quedaron ocultas por el trigger onEdit
     });
+
+    // Archivar (ocultar tab) la hoja del año anterior — datos conservados
+    hojaAnt.hideSheet();
+    totalHojasArchivadas++;
   });
 
   ui.alert(
-    '✅ Ciclo ' + anioAnt + ' cerrado\n\n' +
-    'Estudiantes movidos a ' + SCHOOL_YEAR + ': ' + totalMovidos + '\n' +
-    'Filas ocultas en hojas ' + anioAnt + ':  ' + totalOcultos + '\n\n' +
-    '💡 Las hojas ' + anioAnt + ' siguen disponibles para consulta.\n' +
-    '   Cambia SCHOOL_YEAR a ' + SCHOOL_YEAR + ' si aún no lo has hecho.'
+    '✅ Ciclo ' + anioAnt + ' archivado\n\n' +
+    'Estudiantes inscritos en ' + SCHOOL_YEAR + ': ' + totalMovidos + '\n' +
+    'Hojas archivadas (ocultas): ' + totalHojasArchivadas + '\n\n' +
+    '💡 Las hojas de ' + anioAnt + ' siguen accesibles:\n' +
+    '   Clic derecho en una pestaña → "Mostrar hojas".\n\n' +
+    '📌 Recuerda actualizar SCHOOL_YEAR a ' + SCHOOL_YEAR +
+    '\n   en el código si todavía no lo has hecho.'
   );
+}
+
+
+// ── Reiniciar sistema (eliminar todo y reinstalar) ────────────────────────────
+//  Útil para instalar actualizaciones del script o empezar de cero.
+//  CUIDADO: elimina permanentemente todos los datos de hojas DP Educación.
+function reiniciarSistema() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Confirmación doble por ser operación destructiva
+  const r1 = ui.alert(
+    '⚠️ REINICIAR SISTEMA',
+    'Esta acción eliminará PERMANENTEMENTE:\n\n' +
+    '• Hoja de Interés (todos los registros)\n' +
+    '• Todas las hojas de grado (todos los años)\n' +
+    '• Hoja Seguimiento Graduados\n\n' +
+    '⚠️ Los datos NO se pueden recuperar después.\n\n' +
+    '¿Estás seguro de que quieres continuar?',
+    ui.ButtonSet.YES_NO
+  );
+  if (r1 !== ui.Button.YES) { ui.alert('Operación cancelada.'); return; }
+
+  const r2 = ui.prompt(
+    '🔐 Confirmación final',
+    'Escribe exactamente  REINICIAR  para confirmar:',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (r2.getSelectedButton() !== ui.Button.OK) { ui.alert('Operación cancelada.'); return; }
+  if ((r2.getResponseText() || '').trim() !== 'REINICIAR') {
+    ui.alert('❌ Texto incorrecto. Operación cancelada.'); return;
+  }
+
+  // 1. Eliminar todos los triggers del proyecto
+  ScriptApp.getProjectTriggers().forEach(function(t) { ScriptApp.deleteTrigger(t); });
+
+  // 2. Identificar hojas a eliminar (Interés + grados todos los años + Seguimiento)
+  const hojas       = ss.getSheets();
+  const nombresDP   = [HOJA_INTERES, HOJA_SEGUIMIENTO];
+  // Incluir cualquier hoja cuyo nombre empiece con un grado conocido
+  hojas.forEach(function(h) {
+    const n = h.getName();
+    GRADOS.forEach(function(g) {
+      if (n.startsWith(g)) nombresDP.push(n);
+    });
+  });
+  const nombresUnicos = [...new Set(nombresDP)];
+
+  // Necesitamos conservar al menos una hoja en el spreadsheet
+  const hojasTotales     = ss.getSheets().length;
+  const hojasAEliminar   = ss.getSheets().filter(function(h) {
+    return nombresUnicos.indexOf(h.getName()) >= 0;
+  });
+  const hojasSobreviven  = hojasTotales - hojasAEliminar.length;
+
+  // Si no sobrevive ninguna hoja, crear una temporal
+  let hojaTemporal = null;
+  if (hojasSobreviven <= 0) {
+    hojaTemporal = ss.insertSheet('_temporal');
+  }
+
+  hojasAEliminar.forEach(function(h) {
+    try { ss.deleteSheet(h); } catch(e) { /* ignorar si falla */ }
+  });
+
+  if (hojaTemporal) { ss.deleteSheet(hojaTemporal); } // ya hay otra hoja
+
+  // 3. Reinstalar: crear Hoja de Interés y todas las hojas de grado
+  setupHojaInteres();
+  crearTodasLasHojas();
+  setupHojaSeguimiento();
+  installTriggers();
+
+  ui.alert(
+    '✅ Sistema reiniciado\n\n' +
+    'Se crearon de nuevo:\n' +
+    '• Hoja de Interés\n' +
+    '• ' + GRADOS.length + ' hojas de grado (' + SCHOOL_YEAR + ')\n' +
+    '• Hoja Seguimiento Graduados\n' +
+    '• Triggers automáticos\n\n' +
+    '💡 Recuerda configurar el token de KoboToolbox en:\n' +
+    '   🌐 KoboToolbox → 🔑 Configurar token de API'
+  );
+}
+
+
+// ── Guía de uso ───────────────────────────────────────────────────────────────
+function mostrarGuiaDeUso() {
+  const ui   = SpreadsheetApp.getUi();
+  const guia =
+    '📖  GUÍA DE USO — DP EDUCACIÓN\n' +
+    '═══════════════════════════════════════\n\n' +
+
+    '🔵 FLUJO NORMAL DEL CICLO ESCOLAR\n' +
+    '──────────────────────────────────\n' +
+    '1. Al inicio del año:\n' +
+    '   • DP Educación → ⚙️ Configurar hoja Interés\n' +
+    '   • DP Educación → 📚 Crear hoja de grado → ✨ Crear TODOS\n' +
+    '   • DP Educación → 🔧 Instalar trigger automático\n' +
+    '   • 🌐 KoboToolbox → 🔑 Configurar token de API\n\n' +
+
+    '2. Llegan nuevas inscripciones (KoboToolbox):\n' +
+    '   • 🌐 KoboToolbox → 🔄 Sync → hoja Interés\n' +
+    '   • Los datos de educación llegan a "Hoja de Interés"\n' +
+    '   • La columna "Acción" se pre-llena con el grado asignado\n\n' +
+
+    '3. Procesar inscritos:\n' +
+    '   • En "Hoja de Interés", revisa cada fila\n' +
+    '   • Si la "Acción" está correcta → DP Educación → 🔄 Procesar acciones\n' +
+    '   • O cambia la "Acción" manualmente y se transfiere sola (trigger)\n' +
+    '   • El alumno aparece en su hoja de grado con estado "Inscritx"\n\n' +
+
+    '4. Durante el año:\n' +
+    '   • Cambia el estado de estudiantes en su hoja de grado\n' +
+    '   • Inscritx → normal   |   Retiradx → se retiró\n' +
+    '   • Graduadx → se pregunta si avanzar al siguiente grado\n' +
+    '     → Se crea en el mismo grado del AÑO SIGUIENTE\n' +
+    '     → La fila actual queda oculta (historial conservado)\n' +
+    '   • Quinto Bachillerato: Ciclo de Vida Terminado\n' +
+    '     → Se registra en "Seguimiento Graduados"\n\n' +
+
+    '5. Al final del año (cerrar ciclo):\n' +
+    '   • Actualiza SCHOOL_YEAR en el código al nuevo año\n' +
+    '   • DP Educación → 📅 Cerrar ciclo escolar\n' +
+    '   • Estudiantes Inscritx/Retiradx → nueva hoja del mismo grado año nuevo\n' +
+    '   • Hojas del año anterior quedan ocultas (no borradas)\n' +
+    '   • Para ver hojas ocultas: clic derecho en una pestaña → "Mostrar hojas"\n\n' +
+
+    '🟡 ESTADOS Y SU SIGNIFICADO\n' +
+    '────────────────────────────\n' +
+    '  Inscritx            = Estudiante activo\n' +
+    '  Retiradx            = Se retiró del programa\n' +
+    '  Graduadx            = Completó el grado (avanza al siguiente año)\n' +
+    '  Ciclo de Vida Term. = Completó Quinto Bachillerato\n\n' +
+
+    '🟢 GRADOS EN ORDEN\n' +
+    '────────────────────────────\n' +
+    '  1. Primera Etapa de Primaria\n' +
+    '  2. Segunda Etapa de Primaria\n' +
+    '  3. Primera Etapa de Básicos\n' +
+    '  4. Segunda Etapa de Básicos\n' +
+    '  5. Cuarto Bachillerato\n' +
+    '  6. Quinto Bachillerato  ← Último grado\n\n' +
+
+    '🔴 SI ALGO SALE MAL\n' +
+    '────────────────────────────\n' +
+    '  • DP Educación → 🔁 Reiniciar sistema\n' +
+    '    (elimina todo y reinstala desde cero)\n' +
+    '  • PRECAUCIÓN: los datos se perderán\n\n' +
+
+    '💡 TIPS\n' +
+    '────────────────────────────\n' +
+    '  • El sync de Kobo corre automático cada hora si está activo\n' +
+    '  • No se crean duplicados: se compara por DPI\n' +
+    '  • Los comentarios de papelería se guardan como nota en el nombre\n' +
+    '  • Creamos ID viene directo de KoboToolbox para sincronizar con Salesforce';
+
+  ui.alert('Guía de Uso', guia, ui.ButtonSet.OK);
 }
 
 
