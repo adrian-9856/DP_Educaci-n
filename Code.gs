@@ -1249,6 +1249,8 @@ function _koboParseCsv(text) {
 
 // Helper: devuelve true si el valor Kobo indica "Sí" en cualquier forma
 function _esValorPositivo(val) {
+  if (val === 1 || val === true) return true;   // número/booleano exacto
+  if (val === 0 || val === false) return false;  // número/booleano exacto
   const v = String(val || '').trim().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // quita tildes
   return v === 'si' || v === 'yes' || v === '1' || v === 'true';
@@ -1472,21 +1474,22 @@ function _koboSincronizar(url, modoHistorico) {
 
     rows.slice(1).forEach(function(row) {
 
-      // ── 0. Leer Creamos ID primero (puede ser bypass del filtro) ─────────
+      // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
       const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
 
-      // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
-      // BYPASS: si la persona ya tiene Creamos ID → siempre importar
-      if (!creamosId) {
-        if (idx.PROGRAMAS_EDUC >= 0) {
-          // ✅ Formulario NUEVO: "¿Qué programas te interesan?/Educación..."
-          // Es una columna booleana (1 = marcó Educación, 0/vacío = no).
-          if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
-        } else if (idx.INSCRIPCION >= 0) {
-          // Formulario histórico: "¿Deseas inscribirte en el programa de Educación?"
+      if (idx.PROGRAMAS_EDUC >= 0) {
+        // ✅ Formulario NUEVO: columna booleana "¿Qué programas te interesan?/Educación..."
+        // SIEMPRE aplica, aunque la persona ya tenga Creamos ID.
+        // 1 = marcó Educación → importar. 0/vacío → descartar.
+        if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
+
+      } else if (!creamosId) {
+        // Formulario histórico (sin columna booleana de programa):
+        // El bypass por Creamos ID solo aplica en formularios históricos donde
+        // el participante ya estaba inscrito y no necesita re-marcar el programa.
+        if (idx.INSCRIPCION >= 0) {
           if (_esValorNegativo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
         } else {
-          // Último recurso: presencia de grado Kobo indica sección de Educación
           const tieneGrado = idx.GRADO_KOBO >= 0 &&
             String(row[idx.GRADO_KOBO] || '').trim() !== '';
           if (!tieneGrado) { omitidosFiltro++; return; }
