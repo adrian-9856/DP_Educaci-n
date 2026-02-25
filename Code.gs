@@ -1477,16 +1477,25 @@ function _koboSincronizar(url, modoHistorico) {
       // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
       const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
 
-      if (idx.PROGRAMAS_EDUC >= 0) {
-        // ✅ Formulario NUEVO: columna booleana "¿Qué programas te interesan?/Educación..."
-        // SIEMPRE aplica, aunque la persona ya tenga Creamos ID.
-        // 1 = marcó Educación → importar. 0/vacío → descartar.
-        if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
+      // La presencia de PROGRAMAS_EDUC identifica el formulario NUEVO.
+      const esFormularioNuevo = idx.PROGRAMAS_EDUC >= 0;
+
+      if (esFormularioNuevo) {
+        // ── Formulario NUEVO ────────────────────────────────────────────
+        // Filtro: "¿Deseas inscribirte en el programa de Educación?" = Sí
+        // Es el campo más preciso: solo pasan las personas confirmadas por
+        // el equipo de Educación. Si está vacío o dice No → descartar.
+        if (idx.INSCRIPCION >= 0) {
+          if (!_esValorPositivo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
+        } else {
+          // Sin campo de inscripción: usar el multi-select como respaldo
+          if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
+        }
 
       } else if (!creamosId) {
-        // Formulario histórico (sin columna booleana de programa):
-        // El bypass por Creamos ID solo aplica en formularios históricos donde
-        // el participante ya estaba inscrito y no necesita re-marcar el programa.
+        // ── Formulario HISTÓRICO (sin columna PROGRAMAS_EDUC) ──────────
+        // Bypass por Creamos ID solo en formularios históricos: el participante
+        // ya estaba inscrito y puede que no re-marcara el programa.
         if (idx.INSCRIPCION >= 0) {
           if (_esValorNegativo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
         } else {
