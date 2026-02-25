@@ -95,7 +95,11 @@ const COLOR_FONT_HEADER    = '#FFFFFF';
 
 // ── KoboToolbox ──────────────────────────────────────────────────────────────
 // URL de exportación CSV — datos de educación (requiere token en Script Properties)
+// URL nueva — formulario activo (sync automático cada hora)
 const KOBO_URL_ACTUAL = 'https://kf.kobotoolbox.org/api/v2/assets/auvEELWQEgiwF54W4pGpV5/export-settings/eseYzEgWw6Tui9y2eppZy3L/data.csv';
+
+// URL histórica — formulario de años anteriores (importación única / manual)
+const KOBO_URL_HISTORICO = 'https://kf.kobotoolbox.org/api/v2/assets/akz5K2bGfvvisQaE7VaHev/export-settings/esuV4RKqQhYUUaUizfWBP8S/data.csv';
 
 // Colores encabezado Kobo
 const COLOR_HEADER_KOBO = '#6A1B9A';
@@ -232,12 +236,13 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(
       ui.createMenu('🌐 KoboToolbox')
-        .addItem('🔑 Configurar token de API',      'koboConfigurarToken')
+        .addItem('🔑 Configurar token de API',        'koboConfigurarToken')
         .addSeparator()
-        .addItem('🔄 Sync → hoja Interés',          'koboSincronizarHojaInteres')
+        .addItem('📦 Importar datos HISTÓRICOS',      'koboImportarHistorico')
+        .addItem('🔄 Sync → hoja Interés (actual)',   'koboSincronizarHojaInteres')
         .addSeparator()
-        .addItem('🔁 Sync automático (cada hora)',   'koboInstalarTriggerSync')
-        .addItem('⛔ Detener sync automático',        'koboEliminarTriggerSync')
+        .addItem('🔁 Sync automático (cada hora)',    'koboInstalarTriggerSync')
+        .addItem('⛔ Detener sync automático',          'koboEliminarTriggerSync')
     )
     .addSeparator()
     .addItem('🔁 Reiniciar sistema (⚠️ borra todo)', 'reiniciarSistema')
@@ -335,9 +340,11 @@ function setupHojaInteres() {
   );
 
   // Validación: Acción (grado destino)
+  // setAllowInvalid(true) → muestra advertencia pero NO lanza excepción al escribir
+  // por script (setAllowInvalid(false) bloquea también escrituras programáticas)
   hoja.getRange(2, COL_INTERES.ACCION, MAX, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
-      .requireValueInList(ACCIONES, true).setAllowInvalid(false)
+      .requireValueInList(ACCIONES, true).setAllowInvalid(true)
       .setHelpText('Selecciona el grado al que enviar al estudiante').build()
   );
 
@@ -942,23 +949,22 @@ function reiniciarSistema() {
   });
   const hojasSobreviven  = hojasTotales - hojasAEliminar.length;
 
-  // Si no sobrevive ninguna hoja, crear una temporal
-  let hojaTemporal = null;
-  if (hojasSobreviven <= 0) {
-    hojaTemporal = ss.insertSheet('_temporal');
-  }
+  // Crear hoja temporal SIEMPRE antes de eliminar nada.
+  // Google Sheets exige al menos una hoja visible en todo momento.
+  const hojaTemporal = ss.insertSheet('_reinstalando_');
 
   hojasAEliminar.forEach(function(h) {
-    try { ss.deleteSheet(h); } catch(e) { /* ignorar si falla */ }
+    try { ss.deleteSheet(h); } catch(e) { /* hoja ya eliminada o protegida */ }
   });
 
-  if (hojaTemporal) { ss.deleteSheet(hojaTemporal); } // ya hay otra hoja
-
-  // 3. Reinstalar: crear Hoja de Interés y todas las hojas de grado
+  // Reinstalar todo (crea Interés + grados + Seguimiento + triggers)
   setupHojaInteres();
   crearTodasLasHojas();
   setupHojaSeguimiento();
   installTriggers();
+
+  // Ahora que existen las hojas nuevas, eliminar la temporal
+  try { ss.deleteSheet(hojaTemporal); } catch(e) { /* ignorar */ }
 
   ui.alert(
     '✅ Sistema reiniciado\n\n' +
@@ -1200,30 +1206,62 @@ function _esValorPositivo(val) {
   return v === 'si' || v === 'yes' || v === '1' || v === 'true';
 }
 
+// ── Botón: importar datos históricos (una sola vez) ──────────────────────────
+function koboImportarHistorico() {
+  const ui = SpreadsheetApp.getUi();
+  const r  = ui.alert(
+    '📦 Importar datos históricos',
+    'Se importarán registros del formulario anterior (años pasados).\n\n' +
+    '• Se agregan solo registros cuyo DPI no exista ya en "Interés"\n' +
+    '• Los registros ya en la hoja NO se tocan\n' +
+    '• En datos históricos NO se filtra por "¿Inscribirte en Educación?"\n' +
+    '  (todos los registros del form. histórico son de educación)\n\n' +
+    '¿Continuar?',
+    ui.ButtonSet.YES_NO
+  );
+  if (r !== ui.Button.YES) return;
+  _koboSincronizar(KOBO_URL_HISTORICO, true);
+}
+
 function koboSincronizarHojaInteres() {
+  _koboSincronizar(KOBO_URL_ACTUAL, false);
+}
+
+// ── Función interna compartida de sincronización ──────────────────────────────
+// url:           URL del CSV de KoboToolbox
+// modoHistorico: si true, NO filtra por campo INSCRIPCION (todos son de educación)
+function _koboSincronizar(url, modoHistorico) {
   const ui = SpreadsheetApp.getUi();
   try {
-    const csv  = _koboFetchCsv(KOBO_URL_ACTUAL);
+    const csv  = _koboFetchCsv(url);
     const rows = _koboParseCsv(csv);
-    if (rows.length < 2) { ui.alert('El CSV no tiene datos.'); return; }
+    if (rows.length < 2) { ui.alert('El CSV no tiene datos o está vacío.'); return; }
 
     const headers = rows[0];
 
-    // Normaliza una cadena: sin tildes, minúsculas, sin espacios extremos
+    // Normaliza: sin tildes, minúsculas, sin espacios, barra → espacio
     function _norm(s) {
       return String(s || '').trim().toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
     }
 
-    // Mapa normalizado cabecera → índice (tolerante a diferencias de encoding)
+    // Mapa normalizado cabecera → índice
     const headersNorm = {};
     headers.forEach(function(h, i) {
       const k = _norm(h);
-      if (!headersNorm.hasOwnProperty(k)) headersNorm[k] = i; // primera ocurrencia
+      if (!headersNorm.hasOwnProperty(k)) headersNorm[k] = i;
     });
     function _col(nombre) {
       const k = _norm(nombre);
       return headersNorm.hasOwnProperty(k) ? headersNorm[k] : -1;
+    }
+
+    // Búsqueda difusa: encuentra la primera columna cuyo nombre CONTENGA el término
+    function _colFuzzy(termino) {
+      const t = _norm(termino);
+      const k = Object.keys(headersNorm).find(function(h) { return h.indexOf(t) >= 0; });
+      return k !== undefined ? headersNorm[k] : -1;
     }
 
     // ── Construir índices de todos los campos mapeados ────────────────────
@@ -1232,31 +1270,63 @@ function koboSincronizarHojaInteres() {
       idx[campo] = _col(KOBO_MAP[campo]);
     });
 
-    // Índices de papelería individual
+    // ── Fallbacks robustos para DPI ───────────────────────────────────────
+    if (idx.DPI < 0) idx.DPI = _col('Número de DPI');
+    if (idx.DPI < 0) idx.DPI = _col('Numero de DPI');
+    if (idx.DPI < 0) idx.DPI = _col('DPI');
+    if (idx.DPI < 0) idx.DPI = _col('Número DPI');
+    if (idx.DPI < 0) idx.DPI = _col('CUI');
+    if (idx.DPI < 0) idx.DPI = _colFuzzy('dpi');   // cualquier columna que contenga "dpi"
+    if (idx.DPI < 0) idx.DPI = _colFuzzy('cui');
+
+    // ── Fallbacks para NOMBRE ─────────────────────────────────────────────
+    if (idx.NOMBRE < 0) idx.NOMBRE = _col('Nombre');
+    if (idx.NOMBRE < 0) idx.NOMBRE = _col('Nombres');
+    if (idx.NOMBRE < 0) idx.NOMBRE = _colFuzzy('nombre');
+
+    // ── Fallbacks para APELLIDO ───────────────────────────────────────────
+    if (idx.APELLIDO < 0) idx.APELLIDO = _col('Apellido');
+    if (idx.APELLIDO < 0) idx.APELLIDO = _col('Apellidos');
+    if (idx.APELLIDO < 0) idx.APELLIDO = _colFuzzy('apellido');
+
+    // ── Fallbacks para CREAMOS_ID ─────────────────────────────────────────
+    if (idx.CREAMOS_ID < 0) idx.CREAMOS_ID = _col('Creamos ID');
+    if (idx.CREAMOS_ID < 0) idx.CREAMOS_ID = _colFuzzy('creamos');
+
+    // ── Fallbacks para GRADO_KOBO ─────────────────────────────────────────
+    if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _col('¿Qué grado/etapa te toca con Creamos?');
+    if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('grado');
+    if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('etapa');
+
+    // ── Índices de papelería individual ───────────────────────────────────
     const idxPap = {};
     Object.keys(KOBO_MAP_PAPELERIA).forEach(function(doc) {
       idxPap[doc] = _col(KOBO_MAP_PAPELERIA[doc]);
     });
 
-    // Mapa normalizado de grados (para tolerar variantes con/sin tilde)
+    // Mapa normalizado de grados (tolera variantes con/sin tilde)
     const gradoMapNorm = {};
     Object.keys(KOBO_GRADO_MAP).forEach(function(k) {
       gradoMapNorm[_norm(k)] = KOBO_GRADO_MAP[k];
     });
 
-    // Fallback para DPI: si la columna con prefijo no existe, probar sin prefijo
-    if (idx.DPI < 0) idx.DPI = _col('Número de DPI');
-
-    // Campos no encontrados (advertencia, no bloquea)
-    const criticos  = ['NOMBRE','DPI','INSCRIPCION'];
-    const faltantes = criticos.filter(function(k) { return idx[k] < 0; });
+    // ── Diagnóstico: mostrar columnas no encontradas ───────────────────────
+    const camposImportantes = modoHistorico
+      ? ['NOMBRE', 'DPI']
+      : ['NOMBRE', 'DPI', 'INSCRIPCION'];
+    const faltantes = camposImportantes.filter(function(k) { return idx[k] < 0; });
     if (faltantes.length > 0) {
-      const aviso = faltantes.map(function(k){
-        return '  • ' + k + ' → "' + KOBO_MAP[k] + '"';
+      // Mostrar las primeras 10 columnas del CSV para diagnóstico
+      const muestra = headers.slice(0, 15).join('\n  • ');
+      const aviso   = faltantes.map(function(k){
+        return '  • ' + k + ' → buscado como "' + KOBO_MAP[k] + '"';
       }).join('\n');
       const r = ui.alert(
-        '⚠️ Campos críticos no encontrados',
-        aviso + '\n\n¿Continuar de todas formas?',
+        '⚠️ Campos no encontrados en el CSV',
+        'No se encontraron:\n' + aviso + '\n\n' +
+        'Primeras columnas del CSV:\n  • ' + muestra + '\n\n' +
+        '¿Continuar de todas formas?\n' +
+        '(Los campos faltantes quedarán vacíos)',
         ui.ButtonSet.YES_NO
       );
       if (r !== ui.Button.YES) return;
@@ -1284,8 +1354,9 @@ function koboSincronizarHojaInteres() {
 
     rows.slice(1).forEach(function(row) {
 
-      // ── 1. Filtrar: solo inscriptos en Educación (Sí / Si / sí / Yes / 1) ──
-      if (idx.INSCRIPCION >= 0) {
+      // ── 1. Filtrar: solo inscriptos en Educación ─────────────────────────
+      // En modo histórico todos los registros son de educación → no filtrar
+      if (!modoHistorico && idx.INSCRIPCION >= 0) {
         if (!_esValorPositivo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
       }
 
@@ -1381,11 +1452,11 @@ function koboSincronizarHojaInteres() {
     const primeraFila = Math.max(hojaInteres.getLastRow() + 1, 2);
     hojaInteres.getRange(primeraFila, 1, filasNuevas.length, 14).setValues(filasNuevas);
 
-    // Validación Acción
+    // Validación Acción (setAllowInvalid(true) para no bloquear escrituras por script)
     hojaInteres.getRange(primeraFila, COL_INTERES.ACCION, filasNuevas.length, 1)
       .setDataValidation(
         SpreadsheetApp.newDataValidation()
-          .requireValueInList(ACCIONES, true).setAllowInvalid(false).build()
+          .requireValueInList(ACCIONES, true).setAllowInvalid(true).build()
       );
 
     // Validación Grado Kobo
@@ -1404,11 +1475,13 @@ function koboSincronizarHojaInteres() {
       .setNumberFormat('dd/mm/yyyy');
 
     ss.setActiveSheet(hojaInteres);
-    ss.toast(filasNuevas.length + ' nuevos registros importados.', '✅ Sync completado', 7);
+    const origenLabel = modoHistorico ? '📦 Histórico' : '🔄 Formulario actual';
+    ss.toast(filasNuevas.length + ' registros importados desde ' + (modoHistorico ? 'histórico' : 'formulario actual') + '.', '✅ Sync completado', 7);
     ui.alert(
-      '✅ Sincronización completada\n\n' +
-      'Nuevos registros de educación: ' + filasNuevas.length + '\n' +
-      'Omitidos (otro programa):      ' + omitidosFiltro + '\n' +
+      '✅ ' + (modoHistorico ? 'Importación histórica completada' : 'Sincronización completada') + '\n\n' +
+      'Origen: ' + origenLabel + '\n' +
+      'Nuevos registros agregados:    ' + filasNuevas.length + '\n' +
+      (modoHistorico ? '' : 'Omitidos (otro programa):      ' + omitidosFiltro + '\n') +
       'Ya existían (DPI duplicado):   ' + omitidosDupes + '\n\n' +
       '💡 La columna "Acción" ya viene pre-llenada con el grado asignado.\n' +
       '   Revisa y usa "🔄 Procesar acciones pendientes" para transferir.'
