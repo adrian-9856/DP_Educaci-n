@@ -148,7 +148,20 @@ const KOBO_MAP_PAPELERIA = {
 };
 
 // Mapeo de valores de grado en Kobo → nombres exactos de GRADOS
+// Incluye los valores cortos que realmente aparecen en el CSV
 const KOBO_GRADO_MAP = {
+  // Valores cortos del formulario actual
+  'Etapa Post 1':               'Primera Etapa de Primaria',
+  ' Etapa Post 1':              'Primera Etapa de Primaria',  // a veces con espacio inicial
+  'Etapa Post 2':               'Segunda Etapa de Primaria',
+  ' Etapa Post 2':              'Segunda Etapa de Primaria',
+  'Básico I':                   'Primera Etapa de Básicos',
+  'Basico I':                   'Primera Etapa de Básicos',
+  'Básico II':                  'Segunda Etapa de Básicos',
+  'Basico II':                  'Segunda Etapa de Básicos',
+  '4to Bachillerato':           'Cuarto Bachillerato',
+  '5to Bachillerato':           'Quinto Bachillerato',
+  // Por si llegan con nombre completo
   'Primera Etapa de Primaria':  'Primera Etapa de Primaria',
   'Segunda Etapa de Primaria':  'Segunda Etapa de Primaria',
   'Primera Etapa de Básicos':   'Primera Etapa de Básicos',
@@ -1010,16 +1023,39 @@ function koboSincronizarHojaInteres() {
 
     const headers = rows[0];
 
+    // Normaliza una cadena: sin tildes, minúsculas, sin espacios extremos
+    function _norm(s) {
+      return String(s || '').trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    // Mapa normalizado cabecera → índice (tolerante a diferencias de encoding)
+    const headersNorm = {};
+    headers.forEach(function(h, i) {
+      const k = _norm(h);
+      if (!headersNorm.hasOwnProperty(k)) headersNorm[k] = i; // primera ocurrencia
+    });
+    function _col(nombre) {
+      const k = _norm(nombre);
+      return headersNorm.hasOwnProperty(k) ? headersNorm[k] : -1;
+    }
+
     // ── Construir índices de todos los campos mapeados ────────────────────
     const idx = {};
     Object.keys(KOBO_MAP).forEach(function(campo) {
-      idx[campo] = headers.indexOf(KOBO_MAP[campo]);
+      idx[campo] = _col(KOBO_MAP[campo]);
     });
 
     // Índices de papelería individual
     const idxPap = {};
     Object.keys(KOBO_MAP_PAPELERIA).forEach(function(doc) {
-      idxPap[doc] = headers.indexOf(KOBO_MAP_PAPELERIA[doc]);
+      idxPap[doc] = _col(KOBO_MAP_PAPELERIA[doc]);
+    });
+
+    // Mapa normalizado de grados (para tolerar variantes con/sin tilde)
+    const gradoMapNorm = {};
+    Object.keys(KOBO_GRADO_MAP).forEach(function(k) {
+      gradoMapNorm[_norm(k)] = KOBO_GRADO_MAP[k];
     });
 
     // Campos no encontrados (advertencia, no bloquea)
@@ -1101,7 +1137,7 @@ function koboSincronizarHojaInteres() {
 
       // ── 10. Grado asignado por Creamos ───────────────────────────────────
       const gradoKoboRaw = String(idx.GRADO_KOBO >= 0 ? (row[idx.GRADO_KOBO] || '') : '').trim();
-      const gradoKobo    = KOBO_GRADO_MAP[gradoKoboRaw] || gradoKoboRaw;
+      const gradoKobo    = gradoMapNorm[_norm(gradoKoboRaw)] || KOBO_GRADO_MAP[gradoKoboRaw] || gradoKoboRaw;
 
       // ── 11. Papelería faltante (construida desde campos individuales) ─────
       const papeleriaFaltante = Object.keys(idxPap).filter(function(doc) {
