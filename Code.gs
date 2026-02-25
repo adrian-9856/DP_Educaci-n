@@ -9,15 +9,21 @@
 
 const HOJA_INTERES = 'Interés';
 
-// Columnas de la hoja Interés (1-based)
+// Columnas de la hoja Interés (1-based)  — 13 columnas totales
 const COL_INTERES = {
-  NOMBRE:      1,
-  EDAD:        2,
-  DPI:         3,
-  ULTIMO_ANIO: 4,
-  PAPELERIA:   5,
-  COMENTARIO:  6,
-  ACCION:      7
+  NOMBRE:      1,   // Nombre(s) + Apellido(s)
+  NOMBRE_PREF: 2,   // Nombre Preferido
+  DPI:         3,   // Número de DPI
+  FECHA_NAC:   4,   // Fecha de nacimiento
+  EDAD:        5,   // Calculada automáticamente
+  GENERO:      6,   // Género
+  TELEFONO:    7,   // Número de Teléfono
+  ZONA:        8,   // Zona / Colonia
+  ULTIMO_ANIO: 9,   // Último nivel de estudios
+  GRADO_KOBO:  10,  // Grado asignado por Creamos (desde Kobo)
+  PAPELERIA:   11,  // Documentos faltantes (construido automáticamente)
+  COMENTARIO:  12,  // Comentarios de papelería
+  ACCION:      13   // Desplegable: Enviar a grado
 };
 
 // Columnas de cada hoja de grado (1-based)
@@ -45,13 +51,22 @@ const GRADOS = [
 const GRADO_GRADUACION = 'Quinto Bachillerato';
 
 const PAPELERIA_OPCIONES = [
-  'Partida de nacimiento',
-  'DPI / CUI',
-  'Constancia de notas',
-  'Foto reciente',
-  'Paz y salvo',
-  'Formulario de inscripción',
-  'Certificado médico'
+  'Convenio',
+  'Código Personal del Alumno',
+  'Fe de Edad',
+  'DPI',
+  'Cert. 1° Primaria',
+  'Cert. 2° Primaria',
+  'Cert. 3° Primaria',
+  'Cert. 4° Primaria',
+  'Cert. 5° Primaria',
+  'Cert. 6° Primaria',
+  'Diploma 6° Primaria',
+  'Cert. 1° Básico',
+  'Cert. 2° Básico',
+  'Cert. 3° Básico',
+  'Diploma Básico',
+  'Cert. 4° Bachillerato'
 ];
 
 const MODALIDADES          = ['Presencial', 'Semi-presencial'];
@@ -85,23 +100,60 @@ const COLOR_HEADER_KOBO = '#6A1B9A';
 // Clave en Script Properties donde se guarda el token de Kobo
 const PROP_KOBO_TOKEN = 'KOBO_API_TOKEN';
 
-// Mapeo de columnas KoboToolbox → columnas de la hoja Interés
-// AJUSTA los valores (nombre exacto del campo en el CSV de Kobo)
-// después de ejecutar "🗺️ Ver hoja de mapeo"
+// Mapeo de campos KoboToolbox → columnas de la hoja Interés
+// Nombres exactos del CSV de KoboToolbox
 const KOBO_MAP = {
-  NOMBRE:      'nombre_completo',      // ← ajustar con nombre real del campo Kobo
-  EDAD:        'edad',
-  DPI:         'dpi_cui',
-  ULTIMO_ANIO: 'ultimo_anio_cursado',
-  PAPELERIA:   'papeleria_faltante',
-  COMENTARIO:  'comentario'
+  NOMBRE:       'Inicio/Nombre(s)',
+  APELLIDO:     'Inicio/Apellido(s)',
+  NOMBRE_PREF:  'Inicio/Nombre Preferido',
+  DPI:          'Inicio/Número de DPI',
+  FECHA_NAC:    'Inicio/Fecha de nacimiento',
+  GENERO:       'Inicio/Género',
+  TELEFONO:     'Inicio/Número de Teléfono',
+  ZONA:         'Inicio/Zona',
+  OTRA_ZONA:    'Inicio/Otra zona',
+  COLONIA:      'Inicio/Colonia',
+  OTRA_COLONIA: 'Inicio/Otra colonia',
+  ULTIMO_ANIO:  'Inicio/¿Cuál es tu último nivel de estudios terminado?',
+  GRADO_KOBO:   'Educación Extraescolar/Alternativa/¿Qué grado/etapa te toca con Creamos?',
+  COMENTARIO:   'Educación Extraescolar/Alternativa/Comentarios de papelería',
+  INSCRIPCION:  'Educación Extraescolar/Alternativa/¿Deseas inscribirte en el programa de Educación?'
 };
 
-// Filtro de educación: campo y valor exacto en el CSV de Kobo que indica
-// que el registro pertenece al programa de Educación Extraescolar.
-// Deja KOBO_CAMPO_PROGRAMA en '' para importar TODOS los registros sin filtrar.
-const KOBO_CAMPO_PROGRAMA  = 'programa';              // ← ajustar
-const KOBO_VALOR_EDUCACION = 'Educación Extraescolar'; // ← ajustar
+// Filtro: solo se importan registros donde INSCRIPCION = 'Sí'
+const KOBO_CAMPO_PROGRAMA  = 'Educación Extraescolar/Alternativa/¿Deseas inscribirte en el programa de Educación?';
+const KOBO_VALOR_EDUCACION = 'Sí';
+
+// Campos de papelería en Kobo (0 = faltante, 1 = entregado)
+// Se construye automáticamente la lista de documentos faltantes
+const KOBO_MAP_PAPELERIA = {
+  'Convenio':             'Educación Extraescolar/Alternativa/Convenio',
+  'Código Personal':      'Educación Extraescolar/Alternativa/Código Personal del Alumno',
+  'Fe de Edad':           'Educación Extraescolar/Alternativa/Fe de Edad',
+  'DPI':                  'Educación Extraescolar/Alternativa/DPI',
+  'Cert. 1° Primaria':    'Educación Extraescolar/Alternativa/Certificado 1ero. Primaria',
+  'Cert. 2° Primaria':    'Educación Extraescolar/Alternativa/Certificado 2do. Primaria',
+  'Cert. 3° Primaria':    'Educación Extraescolar/Alternativa/Certificado 3ero. Primaria',
+  'Cert. 4° Primaria':    'Educación Extraescolar/Alternativa/Certificado 4to. Primaria',
+  'Cert. 5° Primaria':    'Educación Extraescolar/Alternativa/Certificado 5to. Primaria',
+  'Cert. 6° Primaria':    'Educación Extraescolar/Alternativa/Certificado 6to. Primaria',
+  'Diploma 6° Primaria':  'Educación Extraescolar/Alternativa/Diploma 6to. Primaria',
+  'Cert. 1° Básico':      'Educación Extraescolar/Alternativa/Certificado 1ero. Básico',
+  'Cert. 2° Básico':      'Educación Extraescolar/Alternativa/Certificado 2do. Básico',
+  'Cert. 3° Básico':      'Educación Extraescolar/Alternativa/Certificado 3ero. Básico',
+  'Diploma Básico':       'Educación Extraescolar/Alternativa/Diploma Básico',
+  'Cert. 4° Bachillerato':'Educación Extraescolar/Alternativa/Certificado 4to. Bachillerato'
+};
+
+// Mapeo de valores de grado en Kobo → nombres exactos de GRADOS
+const KOBO_GRADO_MAP = {
+  'Primera Etapa de Primaria':  'Primera Etapa de Primaria',
+  'Segunda Etapa de Primaria':  'Segunda Etapa de Primaria',
+  'Primera Etapa de Básicos':   'Primera Etapa de Básicos',
+  'Segunda Etapa de Básicos':   'Segunda Etapa de Básicos',
+  'Cuarto Bachillerato':        'Cuarto Bachillerato',
+  'Quinto Bachillerato':        'Quinto Bachillerato'
+};
 
 // ── Hoja de Seguimiento ───────────────────────────────────────────────────────
 const HOJA_SEGUIMIENTO    = 'Seguimiento Graduados';
@@ -203,12 +255,26 @@ function setupHojaInteres() {
   hoja.clearFormats();
   hoja.clearConditionalFormatRules();
 
-  // Encabezados fila 1
+  const NUM_COLS = 13;
+  const MAX      = 500;
+
+  // Encabezados fila 1 — 13 columnas
   const headers = [
-    'Nombre Completo', 'Edad', 'DPI / CUI',
-    'Último Año Cursado', 'Papelería Faltante', 'Comentario', 'Acción'
+    'Nombre Completo',       // 1
+    'Nombre Preferido',      // 2
+    'DPI / CUI',             // 3
+    'Fecha de Nacimiento',   // 4
+    'Edad',                  // 5
+    'Género',                // 6
+    'Teléfono',              // 7
+    'Zona / Colonia',        // 8
+    'Último Nivel Cursado',  // 9
+    'Grado Asignado (Kobo)', // 10
+    'Papelería Faltante',    // 11
+    'Comentario',            // 12
+    'Acción'                 // 13
   ];
-  hoja.getRange(1, 1, 1, headers.length)
+  hoja.getRange(1, 1, 1, NUM_COLS)
     .setValues([headers])
     .setBackground(COLOR_HEADER_INTERES)
     .setFontColor(COLOR_FONT_HEADER)
@@ -218,65 +284,84 @@ function setupHojaInteres() {
   hoja.setFrozenRows(1);
   hoja.setRowHeight(1, 36);
 
-  // Anchos
+  // Anchos de columna
   hoja.setColumnWidth(COL_INTERES.NOMBRE,      220);
-  hoja.setColumnWidth(COL_INTERES.EDAD,         60);
-  hoja.setColumnWidth(COL_INTERES.DPI,         140);
-  hoja.setColumnWidth(COL_INTERES.ULTIMO_ANIO, 160);
-  hoja.setColumnWidth(COL_INTERES.PAPELERIA,   260);
+  hoja.setColumnWidth(COL_INTERES.NOMBRE_PREF, 140);
+  hoja.setColumnWidth(COL_INTERES.DPI,         130);
+  hoja.setColumnWidth(COL_INTERES.FECHA_NAC,   130);
+  hoja.setColumnWidth(COL_INTERES.EDAD,         55);
+  hoja.setColumnWidth(COL_INTERES.GENERO,       90);
+  hoja.setColumnWidth(COL_INTERES.TELEFONO,    120);
+  hoja.setColumnWidth(COL_INTERES.ZONA,        160);
+  hoja.setColumnWidth(COL_INTERES.ULTIMO_ANIO, 180);
+  hoja.setColumnWidth(COL_INTERES.GRADO_KOBO,  200);
+  hoja.setColumnWidth(COL_INTERES.PAPELERIA,   280);
   hoja.setColumnWidth(COL_INTERES.COMENTARIO,  220);
-  hoja.setColumnWidth(COL_INTERES.ACCION,      200);
+  hoja.setColumnWidth(COL_INTERES.ACCION,      210);
 
-  const MAX = 200;
-
-  // Validación Edad
-  hoja.getRange(2, COL_INTERES.EDAD, MAX, 1).setDataValidation(
-    SpreadsheetApp.newDataValidation()
-      .requireNumberBetween(5, 99).setAllowInvalid(false)
-      .setHelpText('Edad entre 5 y 99').build()
-  );
-
-  // Validación Último año cursado
+  // Validación: Último nivel cursado
   hoja.getRange(2, COL_INTERES.ULTIMO_ANIO, MAX, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
-      .requireValueInList(ULTIMO_ANIO_OPCIONES, true).setAllowInvalid(false)
-      .setHelpText('Último año cursado').build()
+      .requireValueInList(ULTIMO_ANIO_OPCIONES, true).setAllowInvalid(true)
+      .setHelpText('Último nivel de estudios').build()
   );
 
-  // Validación Acción (grado destino)
+  // Validación: Grado asignado (Kobo)
+  hoja.getRange(2, COL_INTERES.GRADO_KOBO, MAX, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation()
+      .requireValueInList(GRADOS, true).setAllowInvalid(true)
+      .setHelpText('Grado que le corresponde según Creamos').build()
+  );
+
+  // Validación: Acción (grado destino)
   hoja.getRange(2, COL_INTERES.ACCION, MAX, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInList(ACCIONES, true).setAllowInvalid(false)
       .setHelpText('Selecciona el grado al que enviar al estudiante').build()
   );
 
-  // Fondo azul claro en Papelería
-  hoja.getRange(2, COL_INTERES.PAPELERIA, MAX, 1).setBackground('#E3F2FD');
+  // Fondo diferenciado por columna
+  hoja.getRange(2, COL_INTERES.PAPELERIA,  MAX, 1).setBackground('#E3F2FD'); // azul claro
+  hoja.getRange(2, COL_INTERES.GRADO_KOBO, MAX, 1).setBackground('#F3E5F5'); // morado claro
+  hoja.getRange(2, COL_INTERES.FECHA_NAC,  MAX, 1)
+    .setNumberFormat('dd/mm/yyyy');
 
-  // Formato condicional: resaltar acción pendiente
+  // Formato condicional: acción pendiente (col 13 = M)
   hoja.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND(G2<>"",G2<>"-- Seleccionar --",LEFT(G2,1)<>"✅")')
+      .whenFormulaSatisfied('=AND($M2<>"",($M2<>"-- Seleccionar --"),LEFT($M2,1)<>"✅")')
       .setBackground('#FFF9C4')
       .setRanges([hoja.getRange(2, COL_INTERES.ACCION, MAX, 1)])
+      .build(),
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=LEFT($M2,1)="✅"')
+      .setBackground('#E8F5E9')
+      .setRanges([hoja.getRange(2, 1, MAX, NUM_COLS)])
       .build()
   ]);
 
-  // Nota de ayuda en encabezado Papelería
+  // Nota en Papelería
   hoja.getRange(1, COL_INTERES.PAPELERIA).setNote(
-    'CAMPO MULTI-SELECCIÓN\n\n' +
-    'Selecciona la celda y usa:\n' +
-    'DP Educación → Seleccionar papelería faltante\n\n' +
-    'O escribe manualmente separando con coma:\n' +
-    PAPELERIA_OPCIONES.map((p, i) => (i+1) + '. ' + p).join('\n')
+    'Se construye automáticamente desde KoboToolbox.\n\n' +
+    'O usa: DP Educación → Seleccionar papelería faltante\n\n' +
+    'Documentos:\n' +
+    PAPELERIA_OPCIONES.map(function(p, i) { return (i+1) + '. ' + p; }).join('\n')
+  );
+
+  // Nota en Grado Asignado
+  hoja.getRange(1, COL_INTERES.GRADO_KOBO).setNote(
+    'Grado que le corresponde según evaluación de Creamos.\n' +
+    'Se completa automáticamente desde KoboToolbox.\n\n' +
+    'Úsalo como referencia para seleccionar la Acción.'
   );
 
   SpreadsheetApp.getUi().alert(
-    '✅ Hoja "Interés" configurada.\n\n' +
+    '✅ Hoja "Interés" configurada (13 columnas).\n\n' +
     'Pasos siguientes:\n' +
     '1. Crea los salones: menú → 📚 Crear hoja de grado\n' +
     '2. Instala el trigger: menú → 🔧 Instalar trigger automático\n' +
-    '3. Llena datos y selecciona Acción para transferir alumnos.'
+    '3. Sync Kobo: menú → 🌐 KoboToolbox → 🔄 Sync a hoja Interés\n' +
+    '4. Revisa la columna "Acción" y transfiere alumnos.'
   );
 }
 
@@ -501,12 +586,14 @@ function onEdit(e) {
 function _transferirEstudiante(fila, grado) {
   const ss          = SpreadsheetApp.getActiveSpreadsheet();
   const hojaInteres = ss.getSheetByName(HOJA_INTERES);
-  const datos       = hojaInteres.getRange(fila, 1, 1, 7).getValues()[0];
+  // Lee las 13 columnas de la fila
+  const datos = hojaInteres.getRange(fila, 1, 1, 13).getValues()[0];
 
-  const nombre     = datos[COL_INTERES.NOMBRE - 1];
-  const edad       = datos[COL_INTERES.EDAD - 1];
-  const dpi        = datos[COL_INTERES.DPI - 1];
-  const papeleria  = datos[COL_INTERES.PAPELERIA - 1];
+  const nombre     = datos[COL_INTERES.NOMBRE     - 1];
+  const dpi        = datos[COL_INTERES.DPI        - 1];
+  const edad       = datos[COL_INTERES.EDAD       - 1];
+  const telefono   = datos[COL_INTERES.TELEFONO   - 1];
+  const papeleria  = datos[COL_INTERES.PAPELERIA  - 1];
   const comentario = datos[COL_INTERES.COMENTARIO - 1];
 
   if (!nombre) {
@@ -524,10 +611,10 @@ function _transferirEstudiante(fila, grado) {
 
   hojaGrado.getRange(filaDestino, 1, 1, 8).setValues([[
     id, nombre, dpi,
-    '',           // Teléfono: se completa en la hoja de grado
+    telefono || '',   // Teléfono copiado desde Interés
     edad, grado,
-    'Presencial', // Modalidad por defecto
-    'Oyente'      // Estado por defecto
+    'Presencial',     // Modalidad por defecto
+    'Oyente'          // Estado por defecto
   ]]);
 
   hojaGrado.getRange(filaDestino, 1, 1, 8)
@@ -537,15 +624,15 @@ function _transferirEstudiante(fila, grado) {
   hojaGrado.setRowHeight(filaDestino, 26);
 
   if (papeleria || comentario) {
-    const nota = [
-      papeleria  ? 'Papelería faltante: ' + papeleria  : '',
-      comentario ? 'Comentario: '         + comentario : ''
-    ].filter(Boolean).join('\n');
-    hojaGrado.getRange(filaDestino, COL_GRADO.NOMBRE).setNote(nota);
+    hojaGrado.getRange(filaDestino, COL_GRADO.NOMBRE).setNote(
+      [papeleria  ? 'Papelería faltante: ' + papeleria  : '',
+       comentario ? 'Comentario: '         + comentario : '']
+      .filter(Boolean).join('\n')
+    );
   }
 
-  // Marcar fila origen como procesada
-  hojaInteres.getRange(fila, 1, 1, 7).setBackground('#E8F5E9');
+  // Marcar fila origen como procesada (fondo verde + ✅ en Acción)
+  hojaInteres.getRange(fila, 1, 1, 13).setBackground('#E8F5E9');
   hojaInteres.getRange(fila, COL_INTERES.ACCION)
     .setValue('✅ ' + grado)
     .setDataValidation(null);
@@ -858,47 +945,47 @@ function koboSincronizarHojaInteres() {
   try {
     const csv  = _koboFetchCsv(KOBO_URL_ACTUAL);
     const rows = _koboParseCsv(csv);
-
-    if (rows.length < 2) {
-      ui.alert('El CSV no tiene datos (solo encabezado o está vacío).');
-      return;
-    }
+    if (rows.length < 2) { ui.alert('El CSV no tiene datos.'); return; }
 
     const headers = rows[0];
 
-    // Índices de los campos mapeados en el CSV (busca por nombre)
+    // ── Construir índices de todos los campos mapeados ────────────────────
     const idx = {};
     Object.keys(KOBO_MAP).forEach(function(campo) {
-      const nombreKobo = KOBO_MAP[campo];
-      const pos        = headers.indexOf(nombreKobo);
-      idx[campo]       = pos; // -1 si no se encuentra
+      idx[campo] = headers.indexOf(KOBO_MAP[campo]);
     });
 
-    // Campos no encontrados
-    const noEncontrados = Object.keys(idx).filter(function(k) { return idx[k] < 0; });
-    if (noEncontrados.length > 0) {
-      const aviso = noEncontrados.map(function(k) {
-        return '  • ' + k + ' → buscando "' + KOBO_MAP[k] + '" (no encontrado)';
+    // Índices de papelería individual
+    const idxPap = {};
+    Object.keys(KOBO_MAP_PAPELERIA).forEach(function(doc) {
+      idxPap[doc] = headers.indexOf(KOBO_MAP_PAPELERIA[doc]);
+    });
+
+    // Campos no encontrados (advertencia, no bloquea)
+    const criticos  = ['NOMBRE','DPI','INSCRIPCION'];
+    const faltantes = criticos.filter(function(k) { return idx[k] < 0; });
+    if (faltantes.length > 0) {
+      const aviso = faltantes.map(function(k){
+        return '  • ' + k + ' → "' + KOBO_MAP[k] + '"';
       }).join('\n');
       const r = ui.alert(
-        '⚠️ Campos no encontrados en el CSV',
-        'Los siguientes campos de KOBO_MAP no se encontraron en el CSV:\n\n' + aviso +
-        '\n\nEjecuta "🗺️ Ver hoja de mapeo" para ver los nombres exactos.\n\n' +
-        '¿Continuar de todas formas con los campos que sí se encontraron?',
+        '⚠️ Campos críticos no encontrados',
+        aviso + '\n\n¿Continuar de todas formas?',
         ui.ButtonSet.YES_NO
       );
       if (r !== ui.Button.YES) return;
     }
 
-    const ss          = SpreadsheetApp.getActiveSpreadsheet();
+    // ── Hoja Interés ───────────────────────────────────────────────────────
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
     const hojaInteres = ss.getSheetByName(HOJA_INTERES);
     if (!hojaInteres) {
-      ui.alert('❌ La hoja "Interés" no existe. Ejecuta primero "⚙️ Configurar hoja Interés".');
+      ui.alert('❌ La hoja "Interés" no existe.\nEjecuta primero "⚙️ Configurar hoja Interés".');
       return;
     }
 
-    // DPIs que ya existen en la hoja Interés (para no duplicar)
-    const ultimaFilaI  = hojaInteres.getLastRow();
+    // DPIs ya existentes (deduplicación)
+    const ultimaFilaI    = hojaInteres.getLastRow();
     const dpisExistentes = new Set();
     if (ultimaFilaI >= 2) {
       hojaInteres.getRange(2, COL_INTERES.DPI, ultimaFilaI - 1, 1)
@@ -906,90 +993,162 @@ function koboSincronizarHojaInteres() {
         .forEach(function(d) { if (d !== '') dpisExistentes.add(String(d).trim()); });
     }
 
-    // Índice del campo programa (para filtro de educación)
-    const idxPrograma = KOBO_CAMPO_PROGRAMA
-      ? headers.indexOf(KOBO_CAMPO_PROGRAMA)
-      : -1;
+    let omitidosFiltro = 0, omitidosDupes = 0;
+    const filasNuevas  = [];
 
-    let omitidosPrograma = 0;
-    let omitidosDupes    = 0;
-
-    // Procesar filas Kobo
-    const filasNuevas = [];
     rows.slice(1).forEach(function(row) {
 
-      // ── Filtrar solo educación ──────────────────────────────────────────
-      if (idxPrograma >= 0 && KOBO_VALOR_EDUCACION) {
-        const prog = String(row[idxPrograma] || '').trim();
-        if (prog !== KOBO_VALOR_EDUCACION) { omitidosPrograma++; return; }
+      // ── 1. Filtrar: solo inscriptos en Educación ────────────────────────
+      if (idx.INSCRIPCION >= 0) {
+        const inscr = String(row[idx.INSCRIPCION] || '').trim();
+        if (inscr !== KOBO_VALOR_EDUCACION) { omitidosFiltro++; return; }
       }
 
-      // ── Deduplicar por DPI ──────────────────────────────────────────────
+      // ── 2. Deduplicar por DPI ───────────────────────────────────────────
       const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
       if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
 
-      const nombre     = idx.NOMBRE      >= 0 ? (row[idx.NOMBRE]      || '') : '';
-      const edad       = idx.EDAD        >= 0 ? (row[idx.EDAD]        || '') : '';
-      const ultimoA    = idx.ULTIMO_ANIO >= 0 ? (row[idx.ULTIMO_ANIO] || '') : '';
-      const papeleria  = idx.PAPELERIA   >= 0 ? (row[idx.PAPELERIA]   || '') : '';
-      const comentario = idx.COMENTARIO  >= 0 ? (row[idx.COMENTARIO]  || '') : '';
+      // ── 3. Construir Nombre Completo (Nombre + Apellido) ────────────────
+      const nombre   = String(idx.NOMBRE  >= 0 ? (row[idx.NOMBRE]  || '') : '').trim();
+      const apellido = String(idx.APELLIDO >= 0 ? (row[idx.APELLIDO] || '') : '').trim();
+      const nombreCompleto = [nombre, apellido].filter(Boolean).join(' ');
 
-      if (!nombre && !dpi) return; // fila completamente vacía
+      if (!nombreCompleto && !dpi) return; // fila vacía
+
+      // ── 4. Nombre preferido ─────────────────────────────────────────────
+      const nombrePref = String(idx.NOMBRE_PREF >= 0 ? (row[idx.NOMBRE_PREF] || '') : '').trim();
+
+      // ── 5. Fecha de nacimiento y Edad calculada ─────────────────────────
+      const fechaNacRaw = idx.FECHA_NAC >= 0 ? (row[idx.FECHA_NAC] || '') : '';
+      const fechaNac    = String(fechaNacRaw).trim();
+      const edad        = _calcularEdad(fechaNac);
+
+      // ── 6. Género ────────────────────────────────────────────────────────
+      const genero = String(idx.GENERO >= 0 ? (row[idx.GENERO] || '') : '').trim();
+
+      // ── 7. Teléfono ──────────────────────────────────────────────────────
+      const telefono = String(idx.TELEFONO >= 0 ? (row[idx.TELEFONO] || '') : '').trim();
+
+      // ── 8. Zona / Colonia ────────────────────────────────────────────────
+      let zona     = String(idx.ZONA     >= 0 ? (row[idx.ZONA]     || '') : '').trim();
+      let colonia  = String(idx.COLONIA  >= 0 ? (row[idx.COLONIA]  || '') : '').trim();
+      if (zona    === 'Otra') zona    = String(idx.OTRA_ZONA    >= 0 ? (row[idx.OTRA_ZONA]    || '') : '').trim();
+      if (colonia === 'Otra') colonia = String(idx.OTRA_COLONIA >= 0 ? (row[idx.OTRA_COLONIA] || '') : '').trim();
+      const zonaColonia = [zona, colonia].filter(Boolean).join(' — ');
+
+      // ── 9. Último nivel cursado ──────────────────────────────────────────
+      const ultimoAnio = String(idx.ULTIMO_ANIO >= 0 ? (row[idx.ULTIMO_ANIO] || '') : '').trim();
+
+      // ── 10. Grado asignado por Creamos ───────────────────────────────────
+      const gradoKoboRaw = String(idx.GRADO_KOBO >= 0 ? (row[idx.GRADO_KOBO] || '') : '').trim();
+      const gradoKobo    = KOBO_GRADO_MAP[gradoKoboRaw] || gradoKoboRaw;
+
+      // ── 11. Papelería faltante (construida desde campos individuales) ─────
+      const papeleriaFaltante = Object.keys(idxPap).filter(function(doc) {
+        const i   = idxPap[doc];
+        if (i < 0) return false;
+        const val = String(row[i] || '').trim();
+        // 0, '0', '', 'No' = faltante; '1', 'Sí' = entregado
+        return val === '0' || val === '' || val.toLowerCase() === 'no';
+      }).join(', ');
+
+      // ── 12. Comentario de papelería ──────────────────────────────────────
+      const comentario = String(idx.COMENTARIO >= 0 ? (row[idx.COMENTARIO] || '') : '').trim();
+
+      // ── 13. Acción: pre-llenar desde grado Kobo si existe ────────────────
+      const accion = gradoKobo && GRADOS.indexOf(gradoKobo) >= 0
+        ? 'Enviar a: ' + gradoKobo
+        : '-- Seleccionar --';
 
       filasNuevas.push([
-        String(nombre).trim(),
-        String(edad).trim(),
-        dpi,
-        String(ultimoA).trim(),
-        String(papeleria).trim(),
-        String(comentario).trim(),
-        '-- Seleccionar --'
+        nombreCompleto,  // 1
+        nombrePref,      // 2
+        dpi,             // 3
+        fechaNac,        // 4
+        edad,            // 5
+        genero,          // 6
+        telefono,        // 7
+        zonaColonia,     // 8
+        ultimoAnio,      // 9
+        gradoKobo,       // 10
+        papeleriaFaltante, // 11
+        comentario,      // 12
+        accion           // 13
       ]);
 
       if (dpi) dpisExistentes.add(dpi);
     });
 
     if (!filasNuevas.length) {
-      ui.alert('✅ Sin novedades\n\nTodos los registros de KoboToolbox ya existen en la hoja "Interés".');
+      ui.alert(
+        '✅ Sin novedades\n\n' +
+        'Omitidos (otro programa): ' + omitidosFiltro + '\n' +
+        'Ya existían (DPI):        ' + omitidosDupes
+      );
       return;
     }
 
-    // Escribir al final de la hoja Interés
-    const primeraFilaLibre = Math.max(hojaInteres.getLastRow() + 1, 2);
-    hojaInteres.getRange(primeraFilaLibre, 1, filasNuevas.length, 7).setValues(filasNuevas);
+    // ── Escribir en hoja Interés ───────────────────────────────────────────
+    const primeraFila = Math.max(hojaInteres.getLastRow() + 1, 2);
+    hojaInteres.getRange(primeraFila, 1, filasNuevas.length, 13).setValues(filasNuevas);
 
-    // Aplicar validación de Acción a las nuevas filas
-    const validAccion = SpreadsheetApp.newDataValidation()
-      .requireValueInList(ACCIONES, true).setAllowInvalid(false).build();
-    hojaInteres.getRange(primeraFilaLibre, COL_INTERES.ACCION, filasNuevas.length, 1)
-      .setDataValidation(validAccion);
+    // Validación Acción
+    hojaInteres.getRange(primeraFila, COL_INTERES.ACCION, filasNuevas.length, 1)
+      .setDataValidation(
+        SpreadsheetApp.newDataValidation()
+          .requireValueInList(ACCIONES, true).setAllowInvalid(false).build()
+      );
 
-    // Validación Último año
-    const validAnio = SpreadsheetApp.newDataValidation()
-      .requireValueInList(ULTIMO_ANIO_OPCIONES, true).setAllowInvalid(false).build();
-    hojaInteres.getRange(primeraFilaLibre, COL_INTERES.ULTIMO_ANIO, filasNuevas.length, 1)
-      .setDataValidation(validAnio);
+    // Validación Grado Kobo
+    hojaInteres.getRange(primeraFila, COL_INTERES.GRADO_KOBO, filasNuevas.length, 1)
+      .setDataValidation(
+        SpreadsheetApp.newDataValidation()
+          .requireValueInList(GRADOS, true).setAllowInvalid(true).build()
+      ).setBackground('#F3E5F5');
+
+    // Fondo azul en papelería
+    hojaInteres.getRange(primeraFila, COL_INTERES.PAPELERIA, filasNuevas.length, 1)
+      .setBackground('#E3F2FD');
+
+    // Formato de fecha
+    hojaInteres.getRange(primeraFila, COL_INTERES.FECHA_NAC, filasNuevas.length, 1)
+      .setNumberFormat('dd/mm/yyyy');
 
     ss.setActiveSheet(hojaInteres);
-    ss.toast(
-      filasNuevas.length + ' nuevos registros agregados desde KoboToolbox.',
-      '✅ Sync completado', 7
-    );
-    const filtroMsg = idxPrograma >= 0
-      ? 'Omitidos (otro programa): ' + omitidosPrograma + '\n'
-      : (KOBO_CAMPO_PROGRAMA ? '⚠️ Campo "' + KOBO_CAMPO_PROGRAMA + '" no encontrado en CSV\n' : '');
-
+    ss.toast(filasNuevas.length + ' nuevos registros importados.', '✅ Sync completado', 7);
     ui.alert(
       '✅ Sincronización completada\n\n' +
-      'Registros nuevos (educación): ' + filasNuevas.length + '\n' +
-      filtroMsg +
-      'Duplicados omitidos (DPI):    ' + omitidosDupes + '\n\n' +
-      '💡 Revisa la columna "Acción" para asignar los alumnos nuevos a su grado.'
+      'Nuevos registros de educación: ' + filasNuevas.length + '\n' +
+      'Omitidos (otro programa):      ' + omitidosFiltro + '\n' +
+      'Ya existían (DPI duplicado):   ' + omitidosDupes + '\n\n' +
+      '💡 La columna "Acción" ya viene pre-llenada con el grado asignado.\n' +
+      '   Revisa y usa "🔄 Procesar acciones pendientes" para transferir.'
     );
 
   } catch (err) {
     ui.alert('❌ Error en sincronización\n\n' + err.message);
   }
+}
+
+// ── Helper: calcular edad desde fecha de nacimiento ───────────────────────────
+function _calcularEdad(fechaStr) {
+  if (!fechaStr) return '';
+  // Intenta parsear formatos comunes: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY
+  let fecha;
+  if (/^\d{4}-\d{2}-\d{2}/.test(fechaStr)) {
+    fecha = new Date(fechaStr);
+  } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(fechaStr)) {
+    const p = fechaStr.split('/');
+    fecha = new Date(p[2] + '-' + p[1] + '-' + p[0]); // DD/MM/YYYY
+  } else {
+    fecha = new Date(fechaStr);
+  }
+  if (isNaN(fecha.getTime())) return '';
+  const hoy  = new Date();
+  let   edad = hoy.getFullYear() - fecha.getFullYear();
+  const m    = hoy.getMonth() - fecha.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < fecha.getDate())) edad--;
+  return edad > 0 && edad < 120 ? edad : '';
 }
 
 
