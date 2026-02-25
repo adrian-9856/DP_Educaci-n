@@ -123,15 +123,16 @@ const KOBO_MAP = {
   COLONIA:      'Inicio/Colonia',
   OTRA_COLONIA: 'Inicio/Otra colonia',
   ULTIMO_ANIO:  'Inicio/¿Cuál es tu último nivel de estudios terminado?',
+  // Campo multi-selección de programas de interés (la persona puede marcar varios)
+  PROGRAMAS:    'Inicio/¿En cuál(es) programa(s) te interesa participar?',
   GRADO_KOBO:   'Educación Extraescolar/Alternativa/¿Qué grado/etapa te toca con Creamos?',
   COMENTARIO:   'Educación Extraescolar/Alternativa/Comentarios de papelería',
   INSCRIPCION:  'Educación Extraescolar/Alternativa/¿Deseas inscribirte en el programa de Educación?'
 };
 
-// Filtro: solo se importan registros donde INSCRIPCION sea positivo
-// (acepta Sí, Si, sí, si, SI, Yes, yes, 1 — comparación sin importar mayúsculas/tildes)
-const KOBO_CAMPO_PROGRAMA  = 'Educación Extraescolar/Alternativa/¿Deseas inscribirte en el programa de Educación?';
-const KOBO_VALOR_EDUCACION = 'Sí'; // referencia; la comparación real usa _esValorPositivo()
+// Texto que debe CONTENER el campo PROGRAMAS para considerar a alguien de Educación.
+// Se compara normalizado (sin tildes, minúsculas, / → espacio).
+const KOBO_KEYWORD_EDUCACION = 'educacion extraescolar';
 
 // Campos de papelería en Kobo (0 = faltante, 1 = entregado)
 // Se construye automáticamente la lista de documentos faltantes
@@ -1243,12 +1244,20 @@ function _esValorPositivo(val) {
 }
 
 // ── Helper: considera "no seleccionado" cualquier valor vacío o explícitamente negativo ──
-// Más robusto que _esValorPositivo para exports de Kobo donde el valor positivo
-// puede venir en muchas formas ("Sí, me inscribo", "Educación", "seleccionado", etc.)
 function _esValorNegativo(val) {
   const v = String(val || '').trim().toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   return v === '' || v === 'no' || v === '0' || v === 'false';
+}
+
+// ── Helper: verifica si un campo multi-selección de programas incluye Educación ──
+// Funciona aunque la persona haya elegido varios programas a la vez.
+// Ejemplo de valor: "Inclusión Laboral, Educación Extraescolar/Alternativa, Apoyo..."
+function _contieneEducacion(val) {
+  const v = String(val || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // sin tildes
+    .replace(/\//g, ' ').replace(/\s+/g, ' ');        // / → espacio
+  return v.indexOf(KOBO_KEYWORD_EDUCACION) >= 0;
 }
 
 // ── Helper: normalizar género ─────────────────────────────────────────────────
@@ -1354,8 +1363,17 @@ function _koboSincronizar(url, modoHistorico) {
     if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('grado');
     if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('etapa');
 
-    // ── Fallbacks para INSCRIPCION ────────────────────────────────────────
-    // Aplica tanto para formulario actual como histórico
+    // ── Fallbacks para PROGRAMAS (campo multi-selección) ─────────────────
+    // Este campo tiene el listado de programas elegidos por la persona.
+    // El nombre exacto varía según el formulario, por eso los fallbacks.
+    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('¿En cuál(es) programa(s) te interesa participar?');
+    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('¿Qué programa(s) te interesan?');
+    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('¿En qué programa estás interesado?');
+    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('Programa de interés');
+    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('Programas de interés');
+    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _colFuzzy('programa');
+
+    // ── Fallbacks para INSCRIPCION (campo Sí/No, secundario) ─────────────
     if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _col('¿Deseas inscribirte en el programa de Educación?');
     if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribirte en el programa');
     if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribir');
@@ -1373,9 +1391,11 @@ function _koboSincronizar(url, modoHistorico) {
     });
 
     // ── Diagnóstico: mostrar columnas no encontradas ───────────────────────
+    // Si no se encontró ni PROGRAMAS ni INSCRIPCION, no podremos filtrar por educación
+    const sinFiltro = idx.PROGRAMAS < 0 && idx.INSCRIPCION < 0 && idx.GRADO_KOBO < 0;
     const camposImportantes = modoHistorico
       ? ['NOMBRE', 'DPI']
-      : ['NOMBRE', 'DPI', 'INSCRIPCION'];
+      : sinFiltro ? ['NOMBRE', 'DPI', 'PROGRAMAS'] : ['NOMBRE', 'DPI'];
     const faltantes = camposImportantes.filter(function(k) { return idx[k] < 0; });
     if (faltantes.length > 0) {
       // Mostrar las primeras 10 columnas del CSV para diagnóstico
@@ -1422,12 +1442,17 @@ function _koboSincronizar(url, modoHistorico) {
       // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
       // BYPASS: si la persona ya tiene Creamos ID → siempre importar
       if (!creamosId) {
-        if (idx.INSCRIPCION >= 0) {
-          // Campo encontrado: omitir si valor vacío o explícitamente negativo
-          // (capta "Sí", "Si, me inscribo", "Educación", "1", etc. como positivos)
+        if (idx.PROGRAMAS >= 0) {
+          // ✅ Mejor método: campo multi-selección de programas.
+          // La persona puede haber elegido varios programas; el valor
+          // puede ser: "Educación Extraescolar/Alternativa, Inclusión Laboral"
+          // → se importa si contiene "educacion extraescolar" (cualquier combinación)
+          if (!_contieneEducacion(row[idx.PROGRAMAS])) { omitidosFiltro++; return; }
+        } else if (idx.INSCRIPCION >= 0) {
+          // Fallback: campo Sí/No de inscripción al programa de Educación
           if (_esValorNegativo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
         } else {
-          // Sin campo INSCRIPCION: filtrar por presencia de grado (educación)
+          // Último recurso: si tiene grado Kobo asignado → es de educación
           const tieneGrado = idx.GRADO_KOBO >= 0 &&
             String(row[idx.GRADO_KOBO] || '').trim() !== '';
           if (!tieneGrado) { omitidosFiltro++; return; }
