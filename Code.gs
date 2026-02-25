@@ -309,78 +309,114 @@ function setupHojaInteres() {
   hoja.setFrozenRows(1);
   hoja.setRowHeight(1, 36);
 
-  // Anchos de columna
-  hoja.setColumnWidth(COL_INTERES.CREAMOS_ID,  110);
-  hoja.setColumnWidth(COL_INTERES.NOMBRE,      220);
-  hoja.setColumnWidth(COL_INTERES.NOMBRE_PREF, 140);
-  hoja.setColumnWidth(COL_INTERES.DPI,         130);
-  hoja.setColumnWidth(COL_INTERES.FECHA_NAC,   130);
-  hoja.setColumnWidth(COL_INTERES.EDAD,         55);
-  hoja.setColumnWidth(COL_INTERES.GENERO,       90);
-  hoja.setColumnWidth(COL_INTERES.TELEFONO,    120);
-  hoja.setColumnWidth(COL_INTERES.ZONA,        160);
-  hoja.setColumnWidth(COL_INTERES.ULTIMO_ANIO, 180);
-  hoja.setColumnWidth(COL_INTERES.GRADO_KOBO,  200);
-  hoja.setColumnWidth(COL_INTERES.PAPELERIA,   280);
-  hoja.setColumnWidth(COL_INTERES.COMENTARIO,  220);
-  hoja.setColumnWidth(COL_INTERES.ACCION,      210);
+  // ── Anchos de columna (diseño compacto y legible) ──────────────────────
+  hoja.setColumnWidth(COL_INTERES.CREAMOS_ID,   95);
+  hoja.setColumnWidth(COL_INTERES.NOMBRE,       205);
+  hoja.setColumnWidth(COL_INTERES.NOMBRE_PREF,  130);
+  hoja.setColumnWidth(COL_INTERES.DPI,          115);
+  hoja.setColumnWidth(COL_INTERES.FECHA_NAC,    105);
+  hoja.setColumnWidth(COL_INTERES.EDAD,          45);
+  hoja.setColumnWidth(COL_INTERES.GENERO,        72);
+  hoja.setColumnWidth(COL_INTERES.TELEFONO,     105);
+  hoja.setColumnWidth(COL_INTERES.ZONA,         160);
+  hoja.setColumnWidth(COL_INTERES.ULTIMO_ANIO,  165);
+  hoja.setColumnWidth(COL_INTERES.GRADO_KOBO,   175);
+  hoja.setColumnWidth(COL_INTERES.PAPELERIA,    245);
+  hoja.setColumnWidth(COL_INTERES.COMENTARIO,   180);
+  hoja.setColumnWidth(COL_INTERES.ACCION,       185);
 
-  // Validación: Último nivel cursado
+  // ── Alturas de fila uniformes (datos compactos) ─────────────────────────
+  hoja.setRowHeights(2, MAX, 24);
+
+  // ── Filas alternas para facilitar la lectura ────────────────────────────
+  try { hoja.getBandings().forEach(function(b) { b.remove(); }); } catch(e) {}
+  hoja.getRange(2, 1, MAX, NUM_COLS)
+    .applyRowBanding(SpreadsheetApp.BandingTheme.LIGHT_GREY, false, false)
+    .setFirstRowColor('#FFFFFF')
+    .setSecondRowColor('#F5F5F5');
+
+  // ── Alineación y wrap de toda el área de datos ──────────────────────────
+  const rangoData = hoja.getRange(2, 1, MAX, NUM_COLS);
+  rangoData.setVerticalAlignment('middle')
+           .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+
+  // Columnas cortas/numéricas: centradas
+  [COL_INTERES.CREAMOS_ID, COL_INTERES.DPI, COL_INTERES.FECHA_NAC,
+   COL_INTERES.EDAD, COL_INTERES.GENERO, COL_INTERES.TELEFONO,
+   COL_INTERES.GRADO_KOBO, COL_INTERES.ACCION].forEach(function(c) {
+    hoja.getRange(2, c, MAX, 1).setHorizontalAlignment('center');
+  });
+  // Texto libre: izquierda
+  [COL_INTERES.NOMBRE, COL_INTERES.NOMBRE_PREF, COL_INTERES.ZONA,
+   COL_INTERES.ULTIMO_ANIO, COL_INTERES.PAPELERIA, COL_INTERES.COMENTARIO].forEach(function(c) {
+    hoja.getRange(2, c, MAX, 1).setHorizontalAlignment('left');
+  });
+
+  // ── Colores especiales por columna (se aplican encima del banding) ───────
+  hoja.getRange(2, COL_INTERES.PAPELERIA,  MAX, 1).setBackground('#E3F2FD'); // azul claro
+  hoja.getRange(2, COL_INTERES.GRADO_KOBO, MAX, 1).setBackground('#F3E5F5'); // morado claro
+  hoja.getRange(2, COL_INTERES.ACCION,     MAX, 1).setBackground('#FFFDE7'); // amarillo muy claro
+  hoja.getRange(2, COL_INTERES.FECHA_NAC,  MAX, 1).setNumberFormat('dd/mm/yyyy');
+
+  // ── Borde exterior de tabla ─────────────────────────────────────────────
+  hoja.getRange(1, 1, MAX + 1, NUM_COLS)
+    .setBorder(true, true, true, true, null, null,
+      '#9E9E9E', SpreadsheetApp.BorderStyle.SOLID);
+  // Línea inferior del encabezado más gruesa
+  hoja.getRange(1, 1, 1, NUM_COLS)
+    .setBorder(null, null, true, null, null, null,
+      '#1565C0', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+
+  // ── Validaciones ────────────────────────────────────────────────────────
   hoja.getRange(2, COL_INTERES.ULTIMO_ANIO, MAX, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInList(ULTIMO_ANIO_OPCIONES, true).setAllowInvalid(true)
       .setHelpText('Último nivel de estudios').build()
   );
-
-  // Validación: Grado asignado (Kobo)
   hoja.getRange(2, COL_INTERES.GRADO_KOBO, MAX, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInList(GRADOS, true).setAllowInvalid(true)
       .setHelpText('Grado que le corresponde según Creamos').build()
   );
-
-  // Validación: Acción (grado destino)
-  // setAllowInvalid(true) → muestra advertencia pero NO lanza excepción al escribir
-  // por script (setAllowInvalid(false) bloquea también escrituras programáticas)
+  // setAllowInvalid(true) evita excepción al escribir desde script
   hoja.getRange(2, COL_INTERES.ACCION, MAX, 1).setDataValidation(
     SpreadsheetApp.newDataValidation()
       .requireValueInList(ACCIONES, true).setAllowInvalid(true)
       .setHelpText('Selecciona el grado al que enviar al estudiante').build()
   );
 
-  // Fondo diferenciado por columna
-  hoja.getRange(2, COL_INTERES.PAPELERIA,  MAX, 1).setBackground('#E3F2FD'); // azul claro
-  hoja.getRange(2, COL_INTERES.GRADO_KOBO, MAX, 1).setBackground('#F3E5F5'); // morado claro
-  hoja.getRange(2, COL_INTERES.FECHA_NAC,  MAX, 1)
-    .setNumberFormat('dd/mm/yyyy');
-
-  // Formato condicional: acción pendiente (col 14 = N)
+  // ── Formato condicional ─────────────────────────────────────────────────
   hoja.setConditionalFormatRules([
-    SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($N2<>"",($N2<>"-- Seleccionar --"),LEFT($N2,1)<>"✅")')
-      .setBackground('#FFF9C4')
-      .setRanges([hoja.getRange(2, COL_INTERES.ACCION, MAX, 1)])
-      .build(),
+    // Fila completa verde = ya procesada (✅)
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied('=LEFT($N2,1)="✅"')
-      .setBackground('#E8F5E9')
+      .setBackground('#E8F5E9').setFontColor('#1B5E20')
       .setRanges([hoja.getRange(2, 1, MAX, NUM_COLS)])
+      .build(),
+    // Acción pendiente = amarillo en columna Acción
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=AND($N2<>"",($N2<>"-- Seleccionar --"),LEFT($N2,1)<>"✅")')
+      .setBackground('#FFF176').setFontColor('#F57F17')
+      .setRanges([hoja.getRange(2, COL_INTERES.ACCION, MAX, 1)])
       .build()
   ]);
 
-  // Nota en Papelería
+  // ── Notas de encabezado ─────────────────────────────────────────────────
   hoja.getRange(1, COL_INTERES.PAPELERIA).setNote(
     'Se construye automáticamente desde KoboToolbox.\n\n' +
     'O usa: DP Educación → Seleccionar papelería faltante\n\n' +
     'Documentos:\n' +
     PAPELERIA_OPCIONES.map(function(p, i) { return (i+1) + '. ' + p; }).join('\n')
   );
-
-  // Nota en Grado Asignado
   hoja.getRange(1, COL_INTERES.GRADO_KOBO).setNote(
     'Grado que le corresponde según evaluación de Creamos.\n' +
     'Se completa automáticamente desde KoboToolbox.\n\n' +
     'Úsalo como referencia para seleccionar la Acción.'
+  );
+  hoja.getRange(1, COL_INTERES.ACCION).setNote(
+    '🟡 Amarillo = acción pendiente de procesar\n' +
+    '🟢 Verde = ya transferido a hoja de grado\n\n' +
+    'Para transferir: DP Educación → 🔄 Procesar acciones pendientes'
   );
 
   SpreadsheetApp.getUi().alert(
@@ -1206,6 +1242,17 @@ function _esValorPositivo(val) {
   return v === 'si' || v === 'yes' || v === '1' || v === 'true';
 }
 
+// ── Helper: normalizar género ─────────────────────────────────────────────────
+// Acepta cualquier variante del formulario y devuelve Hombre / Mujer / Otro / ''
+function _normalizarGenero(raw) {
+  const v = String(raw || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // sin tildes
+  if (!v) return '';
+  if (v === 'h' || v === 'm' || v.indexOf('hombre') >= 0 || v.indexOf('masculino') >= 0) return 'Hombre';
+  if (v === 'f' || v.indexOf('mujer') >= 0 || v.indexOf('femenino') >= 0 || v.indexOf('femenil') >= 0) return 'Mujer';
+  return 'Otro';
+}
+
 // ── Botón: importar datos históricos (una sola vez) ──────────────────────────
 function koboImportarHistorico() {
   const ui = SpreadsheetApp.getUi();
@@ -1298,6 +1345,12 @@ function _koboSincronizar(url, modoHistorico) {
     if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('grado');
     if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('etapa');
 
+    // ── Fallbacks para INSCRIPCION ────────────────────────────────────────
+    // Aplica tanto para formulario actual como histórico
+    if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _col('¿Deseas inscribirte en el programa de Educación?');
+    if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribirte en el programa');
+    if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribir');
+
     // ── Índices de papelería individual ───────────────────────────────────
     const idxPap = {};
     Object.keys(KOBO_MAP_PAPELERIA).forEach(function(doc) {
@@ -1354,10 +1407,17 @@ function _koboSincronizar(url, modoHistorico) {
 
     rows.slice(1).forEach(function(row) {
 
-      // ── 1. Filtrar: solo inscriptos en Educación ─────────────────────────
-      // En modo histórico todos los registros son de educación → no filtrar
-      if (!modoHistorico && idx.INSCRIPCION >= 0) {
+      // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
+      // Se aplica igual para formulario actual e histórico.
+      if (idx.INSCRIPCION >= 0) {
+        // Existe el campo → filtrar por él (acepta Sí/Si/Yes/1)
         if (!_esValorPositivo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
+      } else {
+        // Sin campo INSCRIPCION (histórico con estructura diferente):
+        // si tiene grado asignado, es de educación; si no, omitir
+        const tieneGrado = idx.GRADO_KOBO >= 0 &&
+          String(row[idx.GRADO_KOBO] || '').trim() !== '';
+        if (!tieneGrado) { omitidosFiltro++; return; }
       }
 
       // ── 2. Deduplicar por DPI ───────────────────────────────────────────
@@ -1382,8 +1442,8 @@ function _koboSincronizar(url, modoHistorico) {
       const fechaNac    = String(fechaNacRaw).trim();
       const edad        = _calcularEdad(fechaNac);
 
-      // ── 6. Género ────────────────────────────────────────────────────────
-      const genero = String(idx.GENERO >= 0 ? (row[idx.GENERO] || '') : '').trim();
+      // ── 6. Género → normalizado a Hombre / Mujer / Otro ─────────────────
+      const genero = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
 
       // ── 7. Teléfono ──────────────────────────────────────────────────────
       const telefono = String(idx.TELEFONO >= 0 ? (row[idx.TELEFONO] || '') : '').trim();
