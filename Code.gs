@@ -1242,6 +1242,15 @@ function _esValorPositivo(val) {
   return v === 'si' || v === 'yes' || v === '1' || v === 'true';
 }
 
+// ── Helper: considera "no seleccionado" cualquier valor vacío o explícitamente negativo ──
+// Más robusto que _esValorPositivo para exports de Kobo donde el valor positivo
+// puede venir en muchas formas ("Sí, me inscribo", "Educación", "seleccionado", etc.)
+function _esValorNegativo(val) {
+  const v = String(val || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return v === '' || v === 'no' || v === '0' || v === 'false';
+}
+
 // ── Helper: normalizar género ─────────────────────────────────────────────────
 // Acepta cualquier variante del formulario y devuelve Hombre / Mujer / Otro / ''
 function _normalizarGenero(raw) {
@@ -1407,25 +1416,27 @@ function _koboSincronizar(url, modoHistorico) {
 
     rows.slice(1).forEach(function(row) {
 
+      // ── 0. Leer Creamos ID primero (puede ser bypass del filtro) ─────────
+      const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
+
       // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
-      // Se aplica igual para formulario actual e histórico.
-      if (idx.INSCRIPCION >= 0) {
-        // Existe el campo → filtrar por él (acepta Sí/Si/Yes/1)
-        if (!_esValorPositivo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
-      } else {
-        // Sin campo INSCRIPCION (histórico con estructura diferente):
-        // si tiene grado asignado, es de educación; si no, omitir
-        const tieneGrado = idx.GRADO_KOBO >= 0 &&
-          String(row[idx.GRADO_KOBO] || '').trim() !== '';
-        if (!tieneGrado) { omitidosFiltro++; return; }
+      // BYPASS: si la persona ya tiene Creamos ID → siempre importar
+      if (!creamosId) {
+        if (idx.INSCRIPCION >= 0) {
+          // Campo encontrado: omitir si valor vacío o explícitamente negativo
+          // (capta "Sí", "Si, me inscribo", "Educación", "1", etc. como positivos)
+          if (_esValorNegativo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
+        } else {
+          // Sin campo INSCRIPCION: filtrar por presencia de grado (educación)
+          const tieneGrado = idx.GRADO_KOBO >= 0 &&
+            String(row[idx.GRADO_KOBO] || '').trim() !== '';
+          if (!tieneGrado) { omitidosFiltro++; return; }
+        }
       }
 
       // ── 2. Deduplicar por DPI ───────────────────────────────────────────
       const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
       if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
-
-      // ── 2b. Creamos ID ──────────────────────────────────────────────────
-      const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
 
       // ── 3. Construir Nombre Completo (Nombre + Apellido) ────────────────
       const nombre   = String(idx.NOMBRE  >= 0 ? (row[idx.NOMBRE]  || '') : '').trim();
@@ -1474,10 +1485,8 @@ function _koboSincronizar(url, modoHistorico) {
       // ── 12. Comentario de papelería ──────────────────────────────────────
       const comentario = String(idx.COMENTARIO >= 0 ? (row[idx.COMENTARIO] || '') : '').trim();
 
-      // ── 13. Acción: pre-llenar desde grado Kobo si existe ────────────────
-      const accion = gradoKobo && GRADOS.indexOf(gradoKobo) >= 0
-        ? 'Enviar a: ' + gradoKobo
-        : '-- Seleccionar --';
+      // ── 13. Acción: siempre vacía — se selecciona manualmente ───────────
+      const accion = '';
 
       filasNuevas.push([
         creamosId,         // 1  Creamos ID
