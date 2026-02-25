@@ -10,35 +10,37 @@
 const HOJA_INTERES = 'Hoja de Interés';
 
 // Año del ciclo escolar activo — cambia aquí cada año
-const SCHOOL_YEAR = 2027;
+const SCHOOL_YEAR = 2026;
 
-// Columnas de la hoja Interés (1-based)  — 13 columnas totales
+// Columnas de la hoja Interés (1-based)  — 14 columnas totales
 const COL_INTERES = {
-  NOMBRE:      1,   // Nombre(s) + Apellido(s)
-  NOMBRE_PREF: 2,   // Nombre Preferido
-  DPI:         3,   // Número de DPI
-  FECHA_NAC:   4,   // Fecha de nacimiento
-  EDAD:        5,   // Calculada automáticamente
-  GENERO:      6,   // Género
-  TELEFONO:    7,   // Número de Teléfono
-  ZONA:        8,   // Zona / Colonia
-  ULTIMO_ANIO: 9,   // Último nivel de estudios
-  GRADO_KOBO:  10,  // Grado asignado por Creamos (desde Kobo)
-  PAPELERIA:   11,  // Documentos faltantes (construido automáticamente)
-  COMENTARIO:  12,  // Comentarios de papelería
-  ACCION:      13   // Desplegable: Enviar a grado
+  CREAMOS_ID:  1,   // Creamos ID (desde KoboToolbox)
+  NOMBRE:      2,   // Nombre(s) + Apellido(s)
+  NOMBRE_PREF: 3,   // Nombre Preferido
+  DPI:         4,   // Número de DPI
+  FECHA_NAC:   5,   // Fecha de nacimiento
+  EDAD:        6,   // Calculada automáticamente
+  GENERO:      7,   // Género
+  TELEFONO:    8,   // Número de Teléfono
+  ZONA:        9,   // Zona / Colonia
+  ULTIMO_ANIO: 10,  // Último nivel de estudios
+  GRADO_KOBO:  11,  // Grado asignado por Creamos (desde Kobo)
+  PAPELERIA:   12,  // Documentos faltantes (construido automáticamente)
+  COMENTARIO:  13,  // Comentarios de papelería
+  ACCION:      14   // Desplegable: Enviar a grado
 };
 
-// Columnas de cada hoja de grado (1-based)
+// Columnas de cada hoja de grado (1-based) — 9 columnas totales
 const COL_GRADO = {
-  ID:        1,
-  NOMBRE:    2,
-  DPI:       3,
-  TELEFONO:  4,
-  EDAD:      5,
-  GRADO:     6,
-  MODALIDAD: 7,
-  ESTADO:    8
+  ID:         1,
+  CREAMOS_ID: 2,
+  NOMBRE:     3,
+  DPI:        4,
+  TELEFONO:   5,
+  EDAD:       6,
+  GRADO:      7,
+  MODALIDAD:  8,
+  ESTADO:     9
 };
 
 const GRADOS = [
@@ -104,6 +106,7 @@ const PROP_KOBO_TOKEN = 'KOBO_API_TOKEN';
 // Mapeo de campos KoboToolbox → columnas de la hoja Interés
 // Nombres exactos del CSV de KoboToolbox
 const KOBO_MAP = {
+  CREAMOS_ID:   'Inicio/Creamos ID',
   NOMBRE:       'Inicio/Nombre(s)',
   APELLIDO:     'Inicio/Apellido(s)',
   NOMBRE_PREF:  'Inicio/Nombre Preferido',
@@ -267,24 +270,25 @@ function setupHojaInteres() {
   hoja.clearFormats();
   hoja.clearConditionalFormatRules();
 
-  const NUM_COLS = 13;
+  const NUM_COLS = 14;
   const MAX      = 500;
 
-  // Encabezados fila 1 — 13 columnas
+  // Encabezados fila 1 — 14 columnas
   const headers = [
-    'Nombre Completo',       // 1
-    'Nombre Preferido',      // 2
-    'DPI / CUI',             // 3
-    'Fecha de Nacimiento',   // 4
-    'Edad',                  // 5
-    'Género',                // 6
-    'Teléfono',              // 7
-    'Zona / Colonia',        // 8
-    'Último Nivel Cursado',  // 9
-    'Grado Asignado (Kobo)', // 10
-    'Papelería Faltante',    // 11
-    'Comentario',            // 12
-    'Acción'                 // 13
+    'Creamos ID',            // 1
+    'Nombre Completo',       // 2
+    'Nombre Preferido',      // 3
+    'DPI / CUI',             // 4
+    'Fecha de Nacimiento',   // 5
+    'Edad',                  // 6
+    'Género',                // 7
+    'Teléfono',              // 8
+    'Zona / Colonia',        // 9
+    'Último Nivel Cursado',  // 10
+    'Grado Asignado (Kobo)', // 11
+    'Papelería Faltante',    // 12
+    'Comentario',            // 13
+    'Acción'                 // 14
   ];
   hoja.getRange(1, 1, 1, NUM_COLS)
     .setValues([headers])
@@ -297,6 +301,7 @@ function setupHojaInteres() {
   hoja.setRowHeight(1, 36);
 
   // Anchos de columna
+  hoja.setColumnWidth(COL_INTERES.CREAMOS_ID,  110);
   hoja.setColumnWidth(COL_INTERES.NOMBRE,      220);
   hoja.setColumnWidth(COL_INTERES.NOMBRE_PREF, 140);
   hoja.setColumnWidth(COL_INTERES.DPI,         130);
@@ -338,15 +343,15 @@ function setupHojaInteres() {
   hoja.getRange(2, COL_INTERES.FECHA_NAC,  MAX, 1)
     .setNumberFormat('dd/mm/yyyy');
 
-  // Formato condicional: acción pendiente (col 13 = M)
+  // Formato condicional: acción pendiente (col 14 = N)
   hoja.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($M2<>"",($M2<>"-- Seleccionar --"),LEFT($M2,1)<>"✅")')
+      .whenFormulaSatisfied('=AND($N2<>"",($N2<>"-- Seleccionar --"),LEFT($N2,1)<>"✅")')
       .setBackground('#FFF9C4')
       .setRanges([hoja.getRange(2, COL_INTERES.ACCION, MAX, 1)])
       .build(),
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=LEFT($M2,1)="✅"')
+      .whenFormulaSatisfied('=LEFT($N2,1)="✅"')
       .setBackground('#E8F5E9')
       .setRanges([hoja.getRange(2, 1, MAX, NUM_COLS)])
       .build()
@@ -368,7 +373,7 @@ function setupHojaInteres() {
   );
 
   SpreadsheetApp.getUi().alert(
-    '✅ Hoja "Interés" configurada (13 columnas).\n\n' +
+    '✅ Hoja "Interés" configurada (14 columnas).\n\n' +
     'Pasos siguientes:\n' +
     '1. Crea los salones: menú → 📚 Crear hoja de grado\n' +
     '2. Instala el trigger: menú → 🔧 Instalar trigger automático\n' +
@@ -491,7 +496,7 @@ function _formatearHojaGrado(hoja, grado) {
   const estados  = esQuinto ? ESTADOS_QUINTO : ESTADOS;
 
   // Fila 1: título
-  hoja.getRange(1, 1, 1, 8).merge()
+  hoja.getRange(1, 1, 1, 9).merge()
     .setValue(grado.toUpperCase() + '  ·  AÑO ' + anio)
     .setBackground(COLOR_HEADER_GRADO)
     .setFontColor(COLOR_FONT_HEADER)
@@ -503,8 +508,8 @@ function _formatearHojaGrado(hoja, grado) {
   hoja.getRange(1, 1).setNote('Creada: ' + new Date().toLocaleDateString('es-GT') + '\nAño escolar: ' + anio);
 
   // Fila 2: encabezados
-  hoja.getRange(2, 1, 1, 8)
-    .setValues([['ID','Nombre Completo','DPI / CUI','No. Teléfono','Edad','Grado','Modalidad','Estado']])
+  hoja.getRange(2, 1, 1, 9)
+    .setValues([['ID','Creamos ID','Nombre Completo','DPI / CUI','No. Teléfono','Edad','Grado','Modalidad','Estado']])
     .setBackground(COLOR_HEADER_GRADO)
     .setFontColor(COLOR_FONT_HEADER)
     .setFontWeight('bold')
@@ -514,14 +519,15 @@ function _formatearHojaGrado(hoja, grado) {
   hoja.setFrozenRows(2);
 
   // Anchos
-  hoja.setColumnWidth(COL_GRADO.ID,        70);
-  hoja.setColumnWidth(COL_GRADO.NOMBRE,   220);
-  hoja.setColumnWidth(COL_GRADO.DPI,      140);
-  hoja.setColumnWidth(COL_GRADO.TELEFONO, 130);
-  hoja.setColumnWidth(COL_GRADO.EDAD,      60);
-  hoja.setColumnWidth(COL_GRADO.GRADO,    160);
-  hoja.setColumnWidth(COL_GRADO.MODALIDAD,145);
-  hoja.setColumnWidth(COL_GRADO.ESTADO,   130);
+  hoja.setColumnWidth(COL_GRADO.ID,         70);
+  hoja.setColumnWidth(COL_GRADO.CREAMOS_ID, 110);
+  hoja.setColumnWidth(COL_GRADO.NOMBRE,    220);
+  hoja.setColumnWidth(COL_GRADO.DPI,       140);
+  hoja.setColumnWidth(COL_GRADO.TELEFONO,  130);
+  hoja.setColumnWidth(COL_GRADO.EDAD,       60);
+  hoja.setColumnWidth(COL_GRADO.GRADO,     160);
+  hoja.setColumnWidth(COL_GRADO.MODALIDAD, 145);
+  hoja.setColumnWidth(COL_GRADO.ESTADO,    130);
 
   // Validaciones
   hoja.getRange(3, COL_GRADO.GRADO, MAX, 1).setDataValidation(
@@ -544,20 +550,21 @@ function _formatearHojaGrado(hoja, grado) {
       .setAllowInvalid(false).build());
 
   // Formato condicional por estado (colores Salesforce-friendly)
+  // ESTADO está en col 9 = I
   hoja.clearConditionalFormatRules();
-  const dr = hoja.getRange(3, 1, MAX, 8);
+  const dr = hoja.getRange(3, 1, MAX, 9);
   hoja.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=$H3="Retiradx"')
+      .whenFormulaSatisfied('=$I3="Retiradx"')
       .setBackground('#FFCDD2').setRanges([dr]).build(),       // rojo
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=$H3="Graduadx"')
+      .whenFormulaSatisfied('=$I3="Graduadx"')
       .setBackground('#C8E6C9').setRanges([dr]).build(),       // verde
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=$H3="Inscritx"')
+      .whenFormulaSatisfied('=$I3="Inscritx"')
       .setBackground('#FFF9C4').setRanges([dr]).build(),       // amarillo
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=$H3="Ciclo de Vida Terminado"')
+      .whenFormulaSatisfied('=$I3="Ciclo de Vida Terminado"')
       .setBackground('#E8EAF6').setRanges([dr]).build()        // azul índigo
   ]);
 
@@ -623,15 +630,16 @@ function onEdit(e) {
 function _transferirEstudiante(fila, grado) {
   const ss          = SpreadsheetApp.getActiveSpreadsheet();
   const hojaInteres = ss.getSheetByName(HOJA_INTERES);
-  // Lee las 13 columnas de la fila
-  const datos = hojaInteres.getRange(fila, 1, 1, 13).getValues()[0];
+  // Lee las 14 columnas de la fila
+  const datos = hojaInteres.getRange(fila, 1, 1, 14).getValues()[0];
 
-  const nombre     = datos[COL_INTERES.NOMBRE     - 1];
-  const dpi        = datos[COL_INTERES.DPI        - 1];
-  const edad       = datos[COL_INTERES.EDAD       - 1];
-  const telefono   = datos[COL_INTERES.TELEFONO   - 1];
-  const papeleria  = datos[COL_INTERES.PAPELERIA  - 1];
-  const comentario = datos[COL_INTERES.COMENTARIO - 1];
+  const creamosId  = datos[COL_INTERES.CREAMOS_ID  - 1];
+  const nombre     = datos[COL_INTERES.NOMBRE      - 1];
+  const dpi        = datos[COL_INTERES.DPI         - 1];
+  const edad       = datos[COL_INTERES.EDAD        - 1];
+  const telefono   = datos[COL_INTERES.TELEFONO    - 1];
+  const papeleria  = datos[COL_INTERES.PAPELERIA   - 1];
+  const comentario = datos[COL_INTERES.COMENTARIO  - 1];
 
   if (!nombre) {
     SpreadsheetApp.getUi().alert('⚠️ La fila no tiene nombre. No se realizó la transferencia.');
@@ -646,15 +654,15 @@ function _transferirEstudiante(fila, grado) {
   const filaDestino = Math.max(hojaGrado.getLastRow() + 1, 3);
   const id          = _siguienteId(hojaGrado, grado);
 
-  hojaGrado.getRange(filaDestino, 1, 1, 8).setValues([[
-    id, nombre, dpi,
+  hojaGrado.getRange(filaDestino, 1, 1, 9).setValues([[
+    id, creamosId || '', nombre, dpi,
     telefono || '',   // Teléfono copiado desde Interés
     edad, grado,
     'Presencial',     // Modalidad por defecto
     'Inscritx'        // Estado por defecto
   ]]);
 
-  hojaGrado.getRange(filaDestino, 1, 1, 8)
+  hojaGrado.getRange(filaDestino, 1, 1, 9)
     .setVerticalAlignment('middle').setHorizontalAlignment('center');
   hojaGrado.getRange(filaDestino, COL_GRADO.NOMBRE).setHorizontalAlignment('left');
   hojaGrado.getRange(filaDestino, COL_GRADO.DPI).setHorizontalAlignment('left');
@@ -669,7 +677,7 @@ function _transferirEstudiante(fila, grado) {
   }
 
   // Marcar fila origen como procesada (fondo verde + ✅ en Acción)
-  hojaInteres.getRange(fila, 1, 1, 13).setBackground('#E8F5E9');
+  hojaInteres.getRange(fila, 1, 1, 14).setBackground('#E8F5E9');
   hojaInteres.getRange(fila, COL_INTERES.ACCION)
     .setValue('✅ ' + grado)
     .setDataValidation(null);
@@ -684,7 +692,7 @@ function _ofrecerAvanzarSiguienteGrado(hojaActual, fila, gradoActual) {
 
   const ui     = SpreadsheetApp.getUi();
   const ss     = SpreadsheetApp.getActiveSpreadsheet();
-  const datos  = hojaActual.getRange(fila, 1, 1, 8).getValues()[0];
+  const datos  = hojaActual.getRange(fila, 1, 1, 9).getValues()[0];
   const nombre = datos[COL_GRADO.NOMBRE - 1];
 
   const r = ui.alert(
@@ -703,17 +711,18 @@ function _ofrecerAvanzarSiguienteGrado(hojaActual, fila, gradoActual) {
   const filaDestino = Math.max(hojaSig.getLastRow() + 1, 3);
   const id          = _siguienteId(hojaSig, siguienteGrado);
 
-  hojaSig.getRange(filaDestino, 1, 1, 8).setValues([[
+  hojaSig.getRange(filaDestino, 1, 1, 9).setValues([[
     id,
-    datos[COL_GRADO.NOMBRE    - 1],
-    datos[COL_GRADO.DPI       - 1],
-    datos[COL_GRADO.TELEFONO  - 1],
-    datos[COL_GRADO.EDAD      - 1],
+    datos[COL_GRADO.CREAMOS_ID - 1] || '',
+    datos[COL_GRADO.NOMBRE     - 1],
+    datos[COL_GRADO.DPI        - 1],
+    datos[COL_GRADO.TELEFONO   - 1],
+    datos[COL_GRADO.EDAD       - 1],
     siguienteGrado,
-    datos[COL_GRADO.MODALIDAD - 1] || 'Presencial',
+    datos[COL_GRADO.MODALIDAD  - 1] || 'Presencial',
     'Inscritx'
   ]]);
-  hojaSig.getRange(filaDestino, 1, 1, 8)
+  hojaSig.getRange(filaDestino, 1, 1, 9)
     .setVerticalAlignment('middle').setHorizontalAlignment('center');
   hojaSig.getRange(filaDestino, COL_GRADO.NOMBRE).setHorizontalAlignment('left');
   hojaSig.setRowHeight(filaDestino, 26);
@@ -812,7 +821,7 @@ function cerrarCicloEscolar() {
     const ultimaFila = hojaAnt.getLastRow();
     if (ultimaFila < 3) return;
 
-    const datos = hojaAnt.getRange(3, 1, ultimaFila - 2, 8).getValues();
+    const datos = hojaAnt.getRange(3, 1, ultimaFila - 2, 9).getValues();
 
     datos.forEach(function(row, i) {
       const fila   = i + 3;
@@ -829,17 +838,18 @@ function cerrarCicloEscolar() {
         const filaDestino = Math.max(hojaNva.getLastRow() + 1, 3);
         const idNvo       = _siguienteId(hojaNva, grado);
 
-        hojaNva.getRange(filaDestino, 1, 1, 8).setValues([[
+        hojaNva.getRange(filaDestino, 1, 1, 9).setValues([[
           idNvo,
-          row[COL_GRADO.NOMBRE    - 1],
-          row[COL_GRADO.DPI       - 1],
-          row[COL_GRADO.TELEFONO  - 1],
-          row[COL_GRADO.EDAD      - 1],
+          row[COL_GRADO.CREAMOS_ID - 1] || '',
+          row[COL_GRADO.NOMBRE     - 1],
+          row[COL_GRADO.DPI        - 1],
+          row[COL_GRADO.TELEFONO   - 1],
+          row[COL_GRADO.EDAD       - 1],
           grado,
-          row[COL_GRADO.MODALIDAD - 1] || 'Presencial',
+          row[COL_GRADO.MODALIDAD  - 1] || 'Presencial',
           'Inscritx'
         ]]);
-        hojaNva.getRange(filaDestino, 1, 1, 8)
+        hojaNva.getRange(filaDestino, 1, 1, 9)
           .setVerticalAlignment('middle').setHorizontalAlignment('center');
         hojaNva.getRange(filaDestino, COL_GRADO.NOMBRE).setHorizontalAlignment('left');
         hojaNva.setRowHeight(filaDestino, 26);
@@ -1058,6 +1068,9 @@ function koboSincronizarHojaInteres() {
       gradoMapNorm[_norm(k)] = KOBO_GRADO_MAP[k];
     });
 
+    // Fallback para DPI: si la columna con prefijo no existe, probar sin prefijo
+    if (idx.DPI < 0) idx.DPI = _col('Número de DPI');
+
     // Campos no encontrados (advertencia, no bloquea)
     const criticos  = ['NOMBRE','DPI','INSCRIPCION'];
     const faltantes = criticos.filter(function(k) { return idx[k] < 0; });
@@ -1103,6 +1116,9 @@ function koboSincronizarHojaInteres() {
       // ── 2. Deduplicar por DPI ───────────────────────────────────────────
       const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
       if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
+
+      // ── 2b. Creamos ID ──────────────────────────────────────────────────
+      const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
 
       // ── 3. Construir Nombre Completo (Nombre + Apellido) ────────────────
       const nombre   = String(idx.NOMBRE  >= 0 ? (row[idx.NOMBRE]  || '') : '').trim();
@@ -1157,19 +1173,20 @@ function koboSincronizarHojaInteres() {
         : '-- Seleccionar --';
 
       filasNuevas.push([
-        nombreCompleto,  // 1
-        nombrePref,      // 2
-        dpi,             // 3
-        fechaNac,        // 4
-        edad,            // 5
-        genero,          // 6
-        telefono,        // 7
-        zonaColonia,     // 8
-        ultimoAnio,      // 9
-        gradoKobo,       // 10
-        papeleriaFaltante, // 11
-        comentario,      // 12
-        accion           // 13
+        creamosId,         // 1  Creamos ID
+        nombreCompleto,    // 2  Nombre Completo
+        nombrePref,        // 3  Nombre Preferido
+        dpi,               // 4  DPI
+        fechaNac,          // 5  Fecha de Nacimiento
+        edad,              // 6  Edad
+        genero,            // 7  Género
+        telefono,          // 8  Teléfono
+        zonaColonia,       // 9  Zona / Colonia
+        ultimoAnio,        // 10 Último Nivel
+        gradoKobo,         // 11 Grado Asignado (Kobo)
+        papeleriaFaltante, // 12 Papelería Faltante
+        comentario,        // 13 Comentario
+        accion             // 14 Acción
       ]);
 
       if (dpi) dpisExistentes.add(dpi);
@@ -1186,7 +1203,7 @@ function koboSincronizarHojaInteres() {
 
     // ── Escribir en hoja Interés ───────────────────────────────────────────
     const primeraFila = Math.max(hojaInteres.getLastRow() + 1, 2);
-    hojaInteres.getRange(primeraFila, 1, filasNuevas.length, 13).setValues(filasNuevas);
+    hojaInteres.getRange(primeraFila, 1, filasNuevas.length, 14).setValues(filasNuevas);
 
     // Validación Acción
     hojaInteres.getRange(primeraFila, COL_INTERES.ACCION, filasNuevas.length, 1)
@@ -1389,7 +1406,7 @@ function setupHojaSeguimiento() {
 
 function _ofrecerRegistrarGraduado(hojaGrado, fila) {
   const ui      = SpreadsheetApp.getUi();
-  const datos   = hojaGrado.getRange(fila, 1, 1, 8).getValues()[0];
+  const datos   = hojaGrado.getRange(fila, 1, 1, 9).getValues()[0];
   const nombre  = datos[COL_GRADO.NOMBRE - 1];
 
   const r = ui.alert(
@@ -1422,7 +1439,7 @@ function registrarGraduadoManual() {
     return;
   }
 
-  const datos  = hoja.getRange(fila, 1, 1, 8).getValues()[0];
+  const datos  = hoja.getRange(fila, 1, 1, 9).getValues()[0];
   const nombre = datos[COL_GRADO.NOMBRE - 1];
   if (!nombre) { ui.alert('La fila seleccionada no tiene nombre.'); return; }
 
