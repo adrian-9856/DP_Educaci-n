@@ -1172,18 +1172,32 @@ function _koboGetToken() {
 // ── 8.2  Descarga del CSV ─────────────────────────────────────────────────────
 
 function _koboFetchCsv(url) {
-  const token = _koboGetToken();
-  const resp  = UrlFetchApp.fetch(url, {
-    headers:            { Authorization: 'Token ' + token },
-    muteHttpExceptions: true
-  });
-  const code = resp.getResponseCode();
-  if (code === 401 || code === 403) throw new Error(
-    'Error ' + code + ': token inválido o sin permisos.\n' +
-    'Ve a: DP Educación → 🌐 KoboToolbox → 🔑 Configurar token de API'
-  );
-  if (code !== 200) throw new Error('Error al descargar el CSV (HTTP ' + code + ').');
-  return resp.getContentText('UTF-8');
+  const token   = _koboGetToken();
+  const opts    = { headers: { Authorization: 'Token ' + token }, muteHttpExceptions: true };
+  const esperas = [0, 3000, 6000, 12000]; // 4 intentos: 0s, 3s, 6s, 12s
+
+  for (var i = 0; i < esperas.length; i++) {
+    if (esperas[i] > 0) Utilities.sleep(esperas[i]);
+
+    var resp = UrlFetchApp.fetch(url, opts);
+    var code = resp.getResponseCode();
+
+    if (code === 200) return resp.getContentText('UTF-8');
+
+    if (code === 401 || code === 403) throw new Error(
+      'Error ' + code + ': token inválido o sin permisos.\n' +
+      'Ve a: DP Educación → 🌐 KoboToolbox → 🔑 Configurar token de API'
+    );
+
+    // 5xx o cualquier error temporal: reintentar (excepto en el último intento)
+    if (i < esperas.length - 1) continue;
+
+    throw new Error(
+      'Error al descargar el CSV (HTTP ' + code + ').\n' +
+      'Se intentó ' + esperas.length + ' veces. KoboToolbox puede estar caído momentáneamente.\n' +
+      'Espera unos minutos y vuelve a intentarlo.'
+    );
+  }
 }
 
 
