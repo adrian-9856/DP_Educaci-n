@@ -109,29 +109,40 @@ const PROP_KOBO_TOKEN = 'KOBO_API_TOKEN';
 
 // Mapeo de campos KoboToolbox → columnas de la hoja Interés
 // Nombres exactos del CSV de KoboToolbox
+// ── Mapa de campos Kobo → columnas del CSV ───────────────────────────────────
+// Nombres primarios = formulario NUEVO (sin prefijos de grupo).
+// Los formularios históricos usan prefijos "Inicio/" y "Educación Extraescolar/..."
+// → se manejan vía fallbacks más abajo en _koboSincronizar.
 const KOBO_MAP = {
-  CREAMOS_ID:   'Inicio/Creamos ID',
-  NOMBRE:       'Inicio/Nombre(s)',
-  APELLIDO:     'Inicio/Apellido(s)',
-  NOMBRE_PREF:  'Inicio/Nombre Preferido',
-  DPI:          'Inicio/Número de DPI',
-  FECHA_NAC:    'Inicio/Fecha de nacimiento',
-  GENERO:       'Inicio/Género',
-  TELEFONO:     'Inicio/Número de Teléfono',
-  ZONA:         'Inicio/Zona',
-  OTRA_ZONA:    'Inicio/Otra zona',
-  COLONIA:      'Inicio/Colonia',
-  OTRA_COLONIA: 'Inicio/Otra colonia',
-  ULTIMO_ANIO:  'Inicio/¿Cuál es tu último nivel de estudios terminado?',
-  // Campo multi-selección de programas de interés (la persona puede marcar varios)
-  PROGRAMAS:    'Inicio/¿En cuál(es) programa(s) te interesa participar?',
-  GRADO_KOBO:   'Educación Extraescolar/Alternativa/¿Qué grado/etapa te toca con Creamos?',
-  COMENTARIO:   'Educación Extraescolar/Alternativa/Comentarios de papelería',
-  INSCRIPCION:  'Educación Extraescolar/Alternativa/¿Deseas inscribirte en el programa de Educación?'
+  // ── Datos personales ────────────────────────────────────────────────────
+  CREAMOS_ID:     'Creamos ID',
+  NOMBRE:         'Nombre(s)',
+  APELLIDO:       'Apellido(s)',
+  NOMBRE_PREF:    'Nombre Preferido',
+  DPI:            'Número de DPI',           // solo formulario histórico
+  FECHA_NAC:      'Fecha de nacimiento',     // solo formulario histórico
+  EDAD_DIRECTA:   'Edad',                    // formulario nuevo (viene directo)
+  GENERO:         'Género',
+  AUTODESCRIBE:   '¿Cómo te autodescribes?', // formulario nuevo (complementa Género)
+  TELEFONO:       'Número de Teléfono',
+  ZONA:           'Zona',
+  OTRA_ZONA:      'Otra zona',
+  COLONIA:        'Colonia',
+  OTRA_COLONIA:   'Otra colonia',
+  ULTIMO_ANIO:    '¿Cuál es tu último nivel de estudios terminado?',
+  // ── Filtro de programa ──────────────────────────────────────────────────
+  // En el nuevo formulario, "¿Qué programas te interesan?" se desglosa en
+  // columnas booleanas individuales por programa (1 = marcado, 0/vacío = no).
+  PROGRAMAS_EDUC: '¿Qué programas te interesan?/Educación Extraescolar/Alternativa',
+  // ── Sección Educación ───────────────────────────────────────────────────
+  INSCRIPCION:    '¿Deseas inscribirte en el programa de Educación?',
+  GRADO_KOBO:     '¿Qué grado/etapa te toca con Creamos?',
+  COMENTARIO:     'Comentarios',             // sin ":" es la columna de Educación
+  // ── Identificador único de envío (para deduplicar sin DPI) ──────────────
+  UUID:           '_uuid'
 };
 
-// Texto que debe CONTENER el campo PROGRAMAS para considerar a alguien de Educación.
-// Se compara normalizado (sin tildes, minúsculas, / → espacio).
+// Texto clave para búsqueda en campo de texto multi-programa (fallback)
 const KOBO_KEYWORD_EDUCACION = 'educacion extraescolar';
 
 // Campos de papelería en Kobo (0 = faltante, 1 = entregado)
@@ -1335,48 +1346,69 @@ function _koboSincronizar(url, modoHistorico) {
       idx[campo] = _col(KOBO_MAP[campo]);
     });
 
-    // ── Fallbacks robustos para DPI ───────────────────────────────────────
-    if (idx.DPI < 0) idx.DPI = _col('Número de DPI');
+    // ── Fallbacks: nombres de campos del formulario HISTÓRICO ─────────────
+    // El formulario histórico usaba prefijos de grupo ("Inicio/", "Educación.../").
+    // El formulario nuevo no los tiene. Estos fallbacks garantizan compatibilidad.
+
+    // Datos personales (histórico: prefijo "Inicio/")
+    if (idx.NOMBRE       < 0) idx.NOMBRE       = _col('Inicio/Nombre(s)');
+    if (idx.NOMBRE       < 0) idx.NOMBRE       = _col('Nombre');
+    if (idx.NOMBRE       < 0) idx.NOMBRE       = _colFuzzy('nombre');
+
+    if (idx.APELLIDO     < 0) idx.APELLIDO     = _col('Inicio/Apellido(s)');
+    if (idx.APELLIDO     < 0) idx.APELLIDO     = _col('Apellido');
+    if (idx.APELLIDO     < 0) idx.APELLIDO     = _colFuzzy('apellido');
+
+    if (idx.NOMBRE_PREF  < 0) idx.NOMBRE_PREF  = _col('Inicio/Nombre Preferido');
+    if (idx.NOMBRE_PREF  < 0) idx.NOMBRE_PREF  = _colFuzzy('preferido');
+
+    if (idx.CREAMOS_ID   < 0) idx.CREAMOS_ID   = _col('Inicio/Creamos ID');
+    if (idx.CREAMOS_ID   < 0) idx.CREAMOS_ID   = _colFuzzy('creamos');
+
+    if (idx.GENERO       < 0) idx.GENERO       = _col('Inicio/Género');
+    if (idx.GENERO       < 0) idx.GENERO       = _col('Genero');
+
+    if (idx.TELEFONO     < 0) idx.TELEFONO     = _col('Inicio/Número de Teléfono');
+    if (idx.TELEFONO     < 0) idx.TELEFONO     = _col('Número de teléfono');
+    if (idx.TELEFONO     < 0) idx.TELEFONO     = _colFuzzy('telefono');
+
+    if (idx.ZONA         < 0) idx.ZONA         = _col('Inicio/Zona');
+    if (idx.OTRA_ZONA    < 0) idx.OTRA_ZONA    = _col('Inicio/Otra zona');
+    if (idx.COLONIA      < 0) idx.COLONIA      = _col('Inicio/Colonia');
+    if (idx.OTRA_COLONIA < 0) idx.OTRA_COLONIA = _col('Inicio/Otra colonia');
+
+    if (idx.ULTIMO_ANIO  < 0) idx.ULTIMO_ANIO  = _col('Inicio/¿Cuál es tu último nivel de estudios terminado?');
+    if (idx.ULTIMO_ANIO  < 0) idx.ULTIMO_ANIO  = _colFuzzy('ultimo nivel');
+
+    // DPI / CUI (solo formulario histórico)
+    if (idx.DPI < 0) idx.DPI = _col('Inicio/Número de DPI');
     if (idx.DPI < 0) idx.DPI = _col('Numero de DPI');
     if (idx.DPI < 0) idx.DPI = _col('DPI');
-    if (idx.DPI < 0) idx.DPI = _col('Número DPI');
     if (idx.DPI < 0) idx.DPI = _col('CUI');
-    if (idx.DPI < 0) idx.DPI = _colFuzzy('dpi');   // cualquier columna que contenga "dpi"
+    if (idx.DPI < 0) idx.DPI = _colFuzzy('dpi');
     if (idx.DPI < 0) idx.DPI = _colFuzzy('cui');
 
-    // ── Fallbacks para NOMBRE ─────────────────────────────────────────────
-    if (idx.NOMBRE < 0) idx.NOMBRE = _col('Nombre');
-    if (idx.NOMBRE < 0) idx.NOMBRE = _col('Nombres');
-    if (idx.NOMBRE < 0) idx.NOMBRE = _colFuzzy('nombre');
+    // Fecha de nacimiento (solo formulario histórico)
+    if (idx.FECHA_NAC < 0) idx.FECHA_NAC = _col('Inicio/Fecha de nacimiento');
+    if (idx.FECHA_NAC < 0) idx.FECHA_NAC = _colFuzzy('nacimiento');
 
-    // ── Fallbacks para APELLIDO ───────────────────────────────────────────
-    if (idx.APELLIDO < 0) idx.APELLIDO = _col('Apellido');
-    if (idx.APELLIDO < 0) idx.APELLIDO = _col('Apellidos');
-    if (idx.APELLIDO < 0) idx.APELLIDO = _colFuzzy('apellido');
-
-    // ── Fallbacks para CREAMOS_ID ─────────────────────────────────────────
-    if (idx.CREAMOS_ID < 0) idx.CREAMOS_ID = _col('Creamos ID');
-    if (idx.CREAMOS_ID < 0) idx.CREAMOS_ID = _colFuzzy('creamos');
-
-    // ── Fallbacks para GRADO_KOBO ─────────────────────────────────────────
-    if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _col('¿Qué grado/etapa te toca con Creamos?');
+    // Sección Educación (histórico: prefijo "Educación Extraescolar/Alternativa/")
+    if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _col('Educación Extraescolar/Alternativa/¿Qué grado/etapa te toca con Creamos?');
     if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('grado');
     if (idx.GRADO_KOBO < 0) idx.GRADO_KOBO = _colFuzzy('etapa');
 
-    // ── Fallbacks para PROGRAMAS (campo multi-selección) ─────────────────
-    // Este campo tiene el listado de programas elegidos por la persona.
-    // El nombre exacto varía según el formulario, por eso los fallbacks.
-    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('¿En cuál(es) programa(s) te interesa participar?');
-    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('¿Qué programa(s) te interesan?');
-    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('¿En qué programa estás interesado?');
-    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('Programa de interés');
-    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _col('Programas de interés');
-    if (idx.PROGRAMAS < 0) idx.PROGRAMAS = _colFuzzy('programa');
+    if (idx.COMENTARIO < 0) idx.COMENTARIO = _col('Educación Extraescolar/Alternativa/Comentarios de papelería');
+    if (idx.COMENTARIO < 0) idx.COMENTARIO = _col('Comentarios de papelería');
 
-    // ── Fallbacks para INSCRIPCION (campo Sí/No, secundario) ─────────────
+    // ── Fallbacks para el filtro de Educación ────────────────────────────
+    // PROGRAMAS_EDUC: columna booleana del multi-select (formulario nuevo)
+    if (idx.PROGRAMAS_EDUC < 0) idx.PROGRAMAS_EDUC =
+      _col('¿Qué programas te interesan?/Educación Extraescolar/Alternativa');
+
+    // INSCRIPCION: campo Sí/No dentro del grupo Educación (ambos formularios)
+    if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _col('Educación Extraescolar/Alternativa/¿Deseas inscribirte en el programa de Educación?');
     if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _col('¿Deseas inscribirte en el programa de Educación?');
     if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribirte en el programa');
-    if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribir');
 
     // ── Índices de papelería individual ───────────────────────────────────
     const idxPap = {};
@@ -1391,11 +1423,10 @@ function _koboSincronizar(url, modoHistorico) {
     });
 
     // ── Diagnóstico: mostrar columnas no encontradas ───────────────────────
-    // Si no se encontró ni PROGRAMAS ni INSCRIPCION, no podremos filtrar por educación
-    const sinFiltro = idx.PROGRAMAS < 0 && idx.INSCRIPCION < 0 && idx.GRADO_KOBO < 0;
+    const sinFiltro = idx.PROGRAMAS_EDUC < 0 && idx.INSCRIPCION < 0 && idx.GRADO_KOBO < 0;
     const camposImportantes = modoHistorico
       ? ['NOMBRE', 'DPI']
-      : sinFiltro ? ['NOMBRE', 'DPI', 'PROGRAMAS'] : ['NOMBRE', 'DPI'];
+      : sinFiltro ? ['NOMBRE', 'DPI', 'PROGRAMAS_EDUC'] : ['NOMBRE', 'DPI'];
     const faltantes = camposImportantes.filter(function(k) { return idx[k] < 0; });
     if (faltantes.length > 0) {
       // Mostrar las primeras 10 columnas del CSV para diagnóstico
@@ -1422,14 +1453,19 @@ function _koboSincronizar(url, modoHistorico) {
       return;
     }
 
-    // DPIs ya existentes (deduplicación)
+    // DPIs y UUIDs ya existentes (deduplicación)
     const ultimaFilaI    = hojaInteres.getLastRow();
     const dpisExistentes = new Set();
+    const uuidsExistentes = new Set();
     if (ultimaFilaI >= 2) {
       hojaInteres.getRange(2, COL_INTERES.DPI, ultimaFilaI - 1, 1)
         .getValues().flat()
         .forEach(function(d) { if (d !== '') dpisExistentes.add(String(d).trim()); });
+      // UUID guardado en col COMENTARIO no aplica; leemos col 1 (Creamos ID) para
+      // compatibilidad. El UUID real se usa solo para deduplicar dentro del mismo sync.
     }
+    // UUIDs vistos en ESTE sync (evita importar duplicados del mismo CSV)
+    const uuidsSyncActual = new Set();
 
     let omitidosFiltro = 0, omitidosDupes = 0;
     const filasNuevas  = [];
@@ -1442,25 +1478,25 @@ function _koboSincronizar(url, modoHistorico) {
       // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
       // BYPASS: si la persona ya tiene Creamos ID → siempre importar
       if (!creamosId) {
-        if (idx.PROGRAMAS >= 0) {
-          // ✅ Mejor método: campo multi-selección de programas.
-          // La persona puede haber elegido varios programas; el valor
-          // puede ser: "Educación Extraescolar/Alternativa, Inclusión Laboral"
-          // → se importa si contiene "educacion extraescolar" (cualquier combinación)
-          if (!_contieneEducacion(row[idx.PROGRAMAS])) { omitidosFiltro++; return; }
+        if (idx.PROGRAMAS_EDUC >= 0) {
+          // ✅ Formulario NUEVO: "¿Qué programas te interesan?/Educación..."
+          // Es una columna booleana (1 = marcó Educación, 0/vacío = no).
+          if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
         } else if (idx.INSCRIPCION >= 0) {
-          // Fallback: campo Sí/No de inscripción al programa de Educación
+          // Formulario histórico: "¿Deseas inscribirte en el programa de Educación?"
           if (_esValorNegativo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
         } else {
-          // Último recurso: si tiene grado Kobo asignado → es de educación
+          // Último recurso: presencia de grado Kobo indica sección de Educación
           const tieneGrado = idx.GRADO_KOBO >= 0 &&
             String(row[idx.GRADO_KOBO] || '').trim() !== '';
           if (!tieneGrado) { omitidosFiltro++; return; }
         }
       }
 
-      // ── 2. Deduplicar por DPI ───────────────────────────────────────────
-      const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
+      // ── 2. Deduplicar por UUID (formulario nuevo) y DPI (formulario histórico) ──
+      const uuid = idx.UUID >= 0 ? String(row[idx.UUID] || '').trim() : '';
+      if (uuid && uuidsSyncActual.has(uuid)) { omitidosDupes++; return; }
+      const dpi  = idx.DPI  >= 0 ? String(row[idx.DPI]  || '').trim() : '';
       if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
 
       // ── 3. Construir Nombre Completo (Nombre + Apellido) ────────────────
@@ -1468,18 +1504,27 @@ function _koboSincronizar(url, modoHistorico) {
       const apellido = String(idx.APELLIDO >= 0 ? (row[idx.APELLIDO] || '') : '').trim();
       const nombreCompleto = [nombre, apellido].filter(Boolean).join(' ');
 
-      if (!nombreCompleto && !dpi) return; // fila vacía
+      if (!nombreCompleto && !dpi && !uuid) return; // fila completamente vacía
 
       // ── 4. Nombre preferido ─────────────────────────────────────────────
       const nombrePref = String(idx.NOMBRE_PREF >= 0 ? (row[idx.NOMBRE_PREF] || '') : '').trim();
 
-      // ── 5. Fecha de nacimiento y Edad calculada ─────────────────────────
+      // ── 5. Fecha de nacimiento / Edad ────────────────────────────────────
+      // Formulario nuevo: "Edad" viene directo como número.
+      // Formulario histórico: se calcula desde "Fecha de nacimiento".
       const fechaNacRaw = idx.FECHA_NAC >= 0 ? (row[idx.FECHA_NAC] || '') : '';
       const fechaNac    = String(fechaNacRaw).trim();
-      const edad        = _calcularEdad(fechaNac);
+      const edadDirecta = idx.EDAD_DIRECTA >= 0 ? String(row[idx.EDAD_DIRECTA] || '').trim() : '';
+      const edad        = edadDirecta !== '' ? edadDirecta : _calcularEdad(fechaNac);
 
-      // ── 6. Género → normalizado a Hombre / Mujer / Otro ─────────────────
-      const genero = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
+      // ── 6. Género → normalizado; "¿Cómo te autodescribes?" como complemento ──
+      const generoRaw     = idx.GENERO      >= 0 ? row[idx.GENERO]      : '';
+      const autodescRaw   = idx.AUTODESCRIBE >= 0 ? row[idx.AUTODESCRIBE] : '';
+      const generoNorm    = _normalizarGenero(generoRaw);
+      // Si el género normalizado es "Otro", mostrar la autodescripción (si la hay)
+      const genero = (generoNorm === 'Otro' && String(autodescRaw || '').trim())
+        ? String(autodescRaw).trim()
+        : generoNorm;
 
       // ── 7. Teléfono ──────────────────────────────────────────────────────
       const telefono = String(idx.TELEFONO >= 0 ? (row[idx.TELEFONO] || '') : '').trim();
@@ -1530,7 +1575,8 @@ function _koboSincronizar(url, modoHistorico) {
         accion             // 14 Acción
       ]);
 
-      if (dpi) dpisExistentes.add(dpi);
+      if (dpi)  dpisExistentes.add(dpi);
+      if (uuid) uuidsSyncActual.add(uuid);
     });
 
     if (!filasNuevas.length) {
