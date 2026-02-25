@@ -1488,36 +1488,24 @@ function _koboSincronizar(url, modoHistorico) {
 
     rows.slice(1).forEach(function(row) {
 
-      // ── 1. Filtrar: solo personas de Educación Extraescolar/Alternativa ──
-      const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
-
-      // La presencia de PROGRAMAS_EDUC identifica el formulario NUEVO.
-      const esFormularioNuevo = idx.PROGRAMAS_EDUC >= 0;
-
-      if (esFormularioNuevo) {
-        // ── Formulario NUEVO ────────────────────────────────────────────
-        // Filtro: "¿Deseas inscribirte en el programa de Educación?" = Sí
-        // Es el campo más preciso: solo pasan las personas confirmadas por
-        // el equipo de Educación. Si está vacío o dice No → descartar.
-        if (idx.INSCRIPCION >= 0) {
-          if (!_esValorPositivo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
-        } else {
-          // Sin campo de inscripción: usar el multi-select como respaldo
-          if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
-        }
-
-      } else if (!creamosId) {
-        // ── Formulario HISTÓRICO (sin columna PROGRAMAS_EDUC) ──────────
-        // Bypass por Creamos ID solo en formularios históricos: el participante
-        // ya estaba inscrito y puede que no re-marcara el programa.
-        if (idx.INSCRIPCION >= 0) {
-          if (_esValorNegativo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
-        } else {
-          const tieneGrado = idx.GRADO_KOBO >= 0 &&
-            String(row[idx.GRADO_KOBO] || '').trim() !== '';
-          if (!tieneGrado) { omitidosFiltro++; return; }
-        }
+      // ── 1. Filtrar: solo personas de Educación ───────────────────────────
+      // Regla única para AMBOS formularios (histórico y nuevo):
+      //   "¿Deseas inscribirte en el programa de Educación?" = Sí → importar
+      //   Vacío, No, o cualquier otro valor → descartar
+      // No hay bypass por Creamos ID: tener ID no significa ser de Educación.
+      if (idx.INSCRIPCION >= 0) {
+        if (!_esValorPositivo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
+      } else if (idx.PROGRAMAS_EDUC >= 0) {
+        // Sin campo de inscripción: usar el multi-select como respaldo
+        if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
+      } else {
+        // Sin ningún campo conocido: usar presencia de grado como último recurso
+        const tieneGrado = idx.GRADO_KOBO >= 0 &&
+          String(row[idx.GRADO_KOBO] || '').trim() !== '';
+        if (!tieneGrado) { omitidosFiltro++; return; }
       }
+
+      const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
 
       // ── 2. Deduplicar por UUID (formulario nuevo) y DPI (formulario histórico) ──
       const uuid = idx.UUID >= 0 ? String(row[idx.UUID] || '').trim() : '';
