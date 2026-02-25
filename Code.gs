@@ -7,7 +7,10 @@
 //  SECCIÓN 1 · CONSTANTES GLOBALES
 // ────────────────────────────────────────────────────────────────────────────
 
-const HOJA_INTERES = 'Interés';
+const HOJA_INTERES = 'Hoja de Interés';
+
+// Año del ciclo escolar activo — cambia aquí cada año
+const SCHOOL_YEAR = 2027;
 
 // Columnas de la hoja Interés (1-based)  — 13 columnas totales
 const COL_INTERES = {
@@ -69,9 +72,12 @@ const PAPELERIA_OPCIONES = [
   'Cert. 4° Bachillerato'
 ];
 
-const MODALIDADES          = ['Presencial', 'Semi-presencial'];
-const ESTADOS              = ['Oyente', 'Deserción', 'Graduando'];
-const ACCIONES             = ['-- Seleccionar --', ...GRADOS.map(g => 'Enviar a: ' + g)];
+const MODALIDADES    = ['Presencial', 'Semi-presencial'];
+// Estados para hojas de grado (excepto Quinto Bachillerato)
+const ESTADOS        = ['Inscritx', 'Retiradx', 'Graduadx'];
+// Estado especial para Quinto Bachillerato al completar el ciclo
+const ESTADOS_QUINTO = ['Inscritx', 'Retiradx', 'Ciclo de Vida Terminado'];
+const ACCIONES       = ['-- Seleccionar --', ...GRADOS.map(g => 'Enviar a: ' + g)];
 const ULTIMO_ANIO_OPCIONES = [
   'Sin estudios previos',
   'Primera Etapa de Primaria',
@@ -201,6 +207,7 @@ function onOpen() {
     .addItem('📋 Seleccionar papelería faltante',   'abrirSelectorPapeleria')
     .addItem('🔄 Procesar acciones pendientes',     'procesarAccionesPendientes')
     .addItem('📊 Ver resumen de alumnos',            'mostrarResumen')
+    .addItem('📅 Cerrar ciclo escolar',              'cerrarCicloEscolar')
     .addSeparator()
     .addItem('🎓 Configurar hoja Seguimiento',       'setupHojaSeguimiento')
     .addItem('🎓 Registrar graduado manualmente',    'registrarGraduadoManual')
@@ -429,8 +436,14 @@ function guardarPapeleria(valor) {
 //  SECCIÓN 5 · CREACIÓN Y FORMATO DE HOJAS DE GRADO
 // ────────────────────────────────────────────────────────────────────────────
 
-function _nombreHoja(grado) {
-  return grado + ' ' + new Date().getFullYear();
+function _nombreHoja(grado, anio) {
+  return grado + ' ' + (anio || SCHOOL_YEAR);
+}
+
+// Devuelve el siguiente grado en la secuencia, o null si es el último
+function _siguienteGrado(grado) {
+  const idx = GRADOS.indexOf(grado);
+  return idx >= 0 && idx < GRADOS.length - 1 ? GRADOS[idx + 1] : null;
 }
 
 function crearHojaGrado(grado, silencioso) {
@@ -459,8 +472,10 @@ function crearHojaGrado(grado, silencioso) {
 }
 
 function _formatearHojaGrado(hoja, grado) {
-  const anio = new Date().getFullYear();
-  const MAX  = 300;
+  const anio    = SCHOOL_YEAR;
+  const MAX     = 300;
+  const esQuinto = grado === GRADO_GRADUACION;
+  const estados  = esQuinto ? ESTADOS_QUINTO : ESTADOS;
 
   // Fila 1: título
   hoja.getRange(1, 1, 1, 8).merge()
@@ -505,26 +520,32 @@ function _formatearHojaGrado(hoja, grado) {
       .setAllowInvalid(false).setHelpText('Presencial o Semi-presencial').build());
 
   hoja.getRange(3, COL_GRADO.ESTADO, MAX, 1).setDataValidation(
-    SpreadsheetApp.newDataValidation().requireValueInList(ESTADOS, true)
-      .setAllowInvalid(false).setHelpText('Estado del estudiante').build());
+    SpreadsheetApp.newDataValidation().requireValueInList(estados, true)
+      .setAllowInvalid(false)
+      .setHelpText(esQuinto
+        ? 'Inscritx · Retiradx · Ciclo de Vida Terminado'
+        : 'Inscritx · Retiradx · Graduadx').build());
 
   hoja.getRange(3, COL_GRADO.EDAD, MAX, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireNumberBetween(5, 99)
       .setAllowInvalid(false).build());
 
-  // Formato condicional por estado
+  // Formato condicional por estado (colores Salesforce-friendly)
   hoja.clearConditionalFormatRules();
   const dr = hoja.getRange(3, 1, MAX, 8);
   hoja.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=$H3="Deserción"')
-      .setBackground('#FFCDD2').setRanges([dr]).build(),
+      .whenFormulaSatisfied('=$H3="Retiradx"')
+      .setBackground('#FFCDD2').setRanges([dr]).build(),       // rojo
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=$H3="Graduando"')
-      .setBackground('#C8E6C9').setRanges([dr]).build(),
+      .whenFormulaSatisfied('=$H3="Graduadx"')
+      .setBackground('#C8E6C9').setRanges([dr]).build(),       // verde
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=$H3="Oyente"')
-      .setBackground('#FFF9C4').setRanges([dr]).build()
+      .whenFormulaSatisfied('=$H3="Inscritx"')
+      .setBackground('#FFF9C4').setRanges([dr]).build(),       // amarillo
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$H3="Ciclo de Vida Terminado"')
+      .setBackground('#E8EAF6').setRanges([dr]).build()        // azul índigo
   ]);
 
   hoja.getRange(2, COL_GRADO.ID).setNote('ID auto-generado al transferir desde Interés.');
@@ -568,10 +589,21 @@ function onEdit(e) {
     return;
   }
 
-  // ── Detectar graduado en Quinto Bachillerato ──────────────────────────────
-  const nombreQuinto = _nombreHoja(GRADO_GRADUACION);
-  if (nombreH === nombreQuinto && col === COL_GRADO.ESTADO && fila >= 3) {
-    if (valor === 'Graduando') _ofrecerRegistrarGraduado(hoja, fila);
+  // ── Detectar cambio de Estado en hojas de grado ──────────────────────────
+  if (col === COL_GRADO.ESTADO && fila >= 3) {
+    // Ciclo de Vida Terminado → solo en Quinto Bachillerato → Seguimiento
+    if (nombreH === _nombreHoja(GRADO_GRADUACION) && valor === 'Ciclo de Vida Terminado') {
+      _ofrecerRegistrarGraduado(hoja, fila);
+      return;
+    }
+    // Graduadx en cualquier otro grado → ofrecer avanzar al siguiente
+    if (valor === 'Graduadx') {
+      GRADOS.forEach(function(g) {
+        if (nombreH === _nombreHoja(g) && g !== GRADO_GRADUACION) {
+          _ofrecerAvanzarSiguienteGrado(hoja, fila, g);
+        }
+      });
+    }
   }
 }
 
@@ -606,7 +638,7 @@ function _transferirEstudiante(fila, grado) {
     telefono || '',   // Teléfono copiado desde Interés
     edad, grado,
     'Presencial',     // Modalidad por defecto
-    'Oyente'          // Estado por defecto
+    'Inscritx'        // Estado por defecto
   ]]);
 
   hojaGrado.getRange(filaDestino, 1, 1, 8)
@@ -630,6 +662,50 @@ function _transferirEstudiante(fila, grado) {
     .setDataValidation(null);
 
   ss.toast('"' + nombre + '" → "' + nombreHoja + '" · ID: ' + id, '✅ Estudiante transferido', 5);
+}
+
+// ── Ofrecer avanzar al siguiente grado (al marcar Graduadx) ──────────────────
+function _ofrecerAvanzarSiguienteGrado(hojaActual, fila, gradoActual) {
+  const siguienteGrado = _siguienteGrado(gradoActual);
+  if (!siguienteGrado) return; // no hay siguiente
+
+  const ui     = SpreadsheetApp.getUi();
+  const ss     = SpreadsheetApp.getActiveSpreadsheet();
+  const datos  = hojaActual.getRange(fila, 1, 1, 8).getValues()[0];
+  const nombre = datos[COL_GRADO.NOMBRE - 1];
+
+  const r = ui.alert(
+    '🎓 ¿Avanzar al siguiente grado?',
+    '"' + nombre + '" fue marcado como Graduadx en\n"' + gradoActual + '".\n\n' +
+    '¿Crear inscripción en:\n"' + siguienteGrado + ' ' + SCHOOL_YEAR + '"?',
+    ui.ButtonSet.YES_NO
+  );
+  if (r !== ui.Button.YES) return;
+
+  // Crear la hoja del siguiente grado si no existe
+  const nombreSig = _nombreHoja(siguienteGrado);
+  let   hojaSig   = ss.getSheetByName(nombreSig);
+  if (!hojaSig) hojaSig = crearHojaGrado(siguienteGrado, true);
+
+  const filaDestino = Math.max(hojaSig.getLastRow() + 1, 3);
+  const id          = _siguienteId(hojaSig, siguienteGrado);
+
+  hojaSig.getRange(filaDestino, 1, 1, 8).setValues([[
+    id,
+    datos[COL_GRADO.NOMBRE    - 1],
+    datos[COL_GRADO.DPI       - 1],
+    datos[COL_GRADO.TELEFONO  - 1],
+    datos[COL_GRADO.EDAD      - 1],
+    siguienteGrado,
+    datos[COL_GRADO.MODALIDAD - 1] || 'Presencial',
+    'Inscritx'
+  ]]);
+  hojaSig.getRange(filaDestino, 1, 1, 8)
+    .setVerticalAlignment('middle').setHorizontalAlignment('center');
+  hojaSig.getRange(filaDestino, COL_GRADO.NOMBRE).setHorizontalAlignment('left');
+  hojaSig.setRowHeight(filaDestino, 26);
+
+  ss.toast('"' + nombre + '" → "' + nombreSig + '" · ID: ' + id, '✅ Avanzado', 5);
 }
 
 function procesarAccionesPendientes() {
@@ -677,17 +753,99 @@ function mostrarResumen() {
 
     if (total > 0) {
       hoja.getRange(3, COL_GRADO.ESTADO, total, 1).getValues().flat().forEach(function(e) {
-        if (e === 'Oyente')    oyentes++;
-        if (e === 'Deserción') deserc++;
-        if (e === 'Graduando') grad++;
+        if (e === 'Inscritx')                oyentes++;
+        if (e === 'Retiradx')                deserc++;
+        if (e === 'Graduadx')                grad++;
+        if (e === 'Ciclo de Vida Terminado') grad++;
       });
     }
 
     texto += '\n' + grado + '  (' + total + ' alumnos)\n';
-    texto += '   Oyentes: ' + oyentes + '  |  Deserciones: ' + deserc + '  |  Graduandos: ' + grad + '\n';
+    texto += '   Inscritx: ' + oyentes + '  |  Retiradx: ' + deserc + '  |  Graduadx/CVT: ' + grad + '\n';
   });
 
   SpreadsheetApp.getUi().alert('Resumen de Alumnos', texto, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+
+// ── Cerrar ciclo escolar ──────────────────────────────────────────────────────
+//  Para cada hoja de grado del año anterior:
+//  - Estudiantes con 'Inscritx' o 'Retiradx' → nueva inscripción en el
+//    mismo grado pero con SCHOOL_YEAR y la fila anterior queda oculta
+//  - Estudiantes 'Graduadx' / 'Ciclo de Vida Terminado' → ya se procesaron
+//    por el trigger onEdit; sus filas quedan ocultas también
+function cerrarCicloEscolar() {
+  const ui      = SpreadsheetApp.getUi();
+  const ss      = SpreadsheetApp.getActiveSpreadsheet();
+  const anioAnt = SCHOOL_YEAR - 1;  // ciclo que se cierra
+
+  const r = ui.alert(
+    '📅 Cerrar ciclo ' + anioAnt,
+    'Esto procesará todas las hojas de grado del ciclo ' + anioAnt + ':\n\n' +
+    '• Estudiantes Inscritx/Retiradx → se crean en la hoja ' + SCHOOL_YEAR + ' del mismo grado\n' +
+    '• Filas procesadas quedan ocultas en la hoja ' + anioAnt + '\n\n' +
+    '¿Continuar?',
+    ui.ButtonSet.YES_NO
+  );
+  if (r !== ui.Button.YES) return;
+
+  let totalMovidos = 0, totalOcultos = 0;
+
+  GRADOS.forEach(function(grado) {
+    const nombreAnt = _nombreHoja(grado, anioAnt);
+    const hojaAnt   = ss.getSheetByName(nombreAnt);
+    if (!hojaAnt) return; // no existía este grado el año pasado
+
+    const ultimaFila = hojaAnt.getLastRow();
+    if (ultimaFila < 3) return;
+
+    const datos = hojaAnt.getRange(3, 1, ultimaFila - 2, 8).getValues();
+
+    datos.forEach(function(row, i) {
+      const fila   = i + 3;
+      const estado = String(row[COL_GRADO.ESTADO - 1] || '').trim();
+      const nombre = String(row[COL_GRADO.NOMBRE - 1] || '').trim();
+      if (!nombre) return;
+
+      // Estudiantes que no completaron el ciclo → mover al mismo grado 2027
+      if (estado === 'Inscritx' || estado === 'Retiradx') {
+        const nombreNvo = _nombreHoja(grado, SCHOOL_YEAR);
+        let   hojaNva   = ss.getSheetByName(nombreNvo);
+        if (!hojaNva) hojaNva = crearHojaGrado(grado, true);
+
+        const filaDestino = Math.max(hojaNva.getLastRow() + 1, 3);
+        const idNvo       = _siguienteId(hojaNva, grado);
+
+        hojaNva.getRange(filaDestino, 1, 1, 8).setValues([[
+          idNvo,
+          row[COL_GRADO.NOMBRE    - 1],
+          row[COL_GRADO.DPI       - 1],
+          row[COL_GRADO.TELEFONO  - 1],
+          row[COL_GRADO.EDAD      - 1],
+          grado,
+          row[COL_GRADO.MODALIDAD - 1] || 'Presencial',
+          'Inscritx'
+        ]]);
+        hojaNva.getRange(filaDestino, 1, 1, 8)
+          .setVerticalAlignment('middle').setHorizontalAlignment('center');
+        hojaNva.getRange(filaDestino, COL_GRADO.NOMBRE).setHorizontalAlignment('left');
+        hojaNva.setRowHeight(filaDestino, 26);
+        totalMovidos++;
+      }
+
+      // Ocultar la fila en la hoja del año anterior
+      hojaAnt.hideRows(fila);
+      totalOcultos++;
+    });
+  });
+
+  ui.alert(
+    '✅ Ciclo ' + anioAnt + ' cerrado\n\n' +
+    'Estudiantes movidos a ' + SCHOOL_YEAR + ': ' + totalMovidos + '\n' +
+    'Filas ocultas en hojas ' + anioAnt + ':  ' + totalOcultos + '\n\n' +
+    '💡 Las hojas ' + anioAnt + ' siguen disponibles para consulta.\n' +
+    '   Cambia SCHOOL_YEAR a ' + SCHOOL_YEAR + ' si aún no lo has hecho.'
+  );
 }
 
 
@@ -1094,7 +1252,7 @@ function koboEliminarTriggerSync() {
 //
 //  Registra a los estudiantes que completan Quinto Bachillerato.
 //  Flujo automático:
-//    1. En la hoja "Quinto Bachillerato [año]", cambia Estado → "Graduando"
+//    1. En la hoja "Quinto Bachillerato [año]", cambia Estado → "Ciclo de Vida Terminado"
 //    2. El trigger onEdit detecta el cambio y pregunta si deseas registrar
 //       al alumno en la hoja "Seguimiento Graduados"
 //    3. También puedes registrar graduados manualmente desde el menú
@@ -1185,7 +1343,7 @@ function setupHojaSeguimiento() {
   SpreadsheetApp.getUi().alert(
     '✅ Hoja "' + HOJA_SEGUIMIENTO + '" configurada.\n\n' +
     'Cuando un alumno de Quinto Bachillerato cambie su\n' +
-    'Estado a "Graduando", se ofrecerá registrarlo aquí\n' +
+    'Estado a "Ciclo de Vida Terminado", se ofrecerá registrarlo aquí\n' +
     'automáticamente.'
   );
 }
@@ -1200,8 +1358,8 @@ function _ofrecerRegistrarGraduado(hojaGrado, fila) {
 
   const r = ui.alert(
     '🎓 ¿Registrar en Seguimiento?',
-    '"' + nombre + '" fue marcado como Graduando.\n\n' +
-    '¿Deseas agregar este graduado a la hoja "' + HOJA_SEGUIMIENTO + '"?',
+    '"' + nombre + '" completó el Ciclo de Vida.\n\n' +
+    '¿Agregar a la hoja "' + HOJA_SEGUIMIENTO + '"?',
     ui.ButtonSet.YES_NO
   );
   if (r !== ui.Button.YES) return;
