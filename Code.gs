@@ -95,7 +95,7 @@ const COLOR_FONT_HEADER    = '#FFFFFF';
 
 // ── KoboToolbox ──────────────────────────────────────────────────────────────
 // URL de exportación CSV — datos de educación (requiere token en Script Properties)
-// URL nueva — formulario activo (sync automático cada hora)
+// URL nueva — formulario activo (sync automático cada minuto)
 const KOBO_URL_ACTUAL = 'https://kf.kobotoolbox.org/api/v2/assets/auvEELWQEgiwF54W4pGpV5/export-settings/eseYzEgWw6Tui9y2eppZy3L/data.csv';
 
 // URL histórica — formulario de años anteriores (importación única / manual)
@@ -253,7 +253,7 @@ function onOpen() {
         .addItem('📦 Importar datos HISTÓRICOS',      'koboImportarHistorico')
         .addItem('🔄 Sync → hoja Interés (actual)',   'koboSincronizarHojaInteres')
         .addSeparator()
-        .addItem('🔁 Sync automático (cada hora)',    'koboInstalarTriggerSync')
+        .addItem('🔁 Sync automático (cada minuto)',  'koboInstalarTriggerSync')
         .addItem('⛔ Detener sync automático',          'koboEliminarTriggerSync')
     )
     .addSeparator()
@@ -1029,76 +1029,228 @@ function reiniciarSistema() {
 
 // ── Guía de uso ───────────────────────────────────────────────────────────────
 function mostrarGuiaDeUso() {
-  const ui   = SpreadsheetApp.getUi();
-  const guia =
-    '📖  GUÍA DE USO — DP EDUCACIÓN\n' +
-    '═══════════════════════════════════════\n\n' +
+  crearHojaGuia();
+}
 
-    '🔵 FLUJO NORMAL DEL CICLO ESCOLAR\n' +
-    '──────────────────────────────────\n' +
-    '1. Al inicio del año:\n' +
-    '   • DP Educación → ⚙️ Configurar hoja Interés\n' +
-    '   • DP Educación → 📚 Crear hoja de grado → ✨ Crear TODOS\n' +
-    '   • DP Educación → 🔧 Instalar trigger automático\n' +
-    '   • 🌐 KoboToolbox → 🔑 Configurar token de API\n\n' +
+// ── Hoja visual "📖 Guía de Uso" ─────────────────────────────────────────────
+function crearHojaGuia() {
+  const ss     = SpreadsheetApp.getActiveSpreadsheet();
+  const NOMBRE = '📖 Guía de Uso';
 
-    '2. Llegan nuevas inscripciones (KoboToolbox):\n' +
-    '   • 🌐 KoboToolbox → 🔄 Sync → hoja Interés\n' +
-    '   • Los datos de educación llegan a "Hoja de Interés"\n' +
-    '   • La columna "Acción" se pre-llena con el grado asignado\n\n' +
+  let hoja = ss.getSheetByName(NOMBRE);
+  if (!hoja) {
+    hoja = ss.insertSheet(NOMBRE, 0);
+  } else {
+    hoja.clearContents();
+    hoja.clearFormats();
+  }
 
-    '3. Procesar inscritos:\n' +
-    '   • En "Hoja de Interés", revisa cada fila\n' +
-    '   • Si la "Acción" está correcta → DP Educación → 🔄 Procesar acciones\n' +
-    '   • O cambia la "Acción" manualmente y se transfiere sola (trigger)\n' +
-    '   • El alumno aparece en su hoja de grado con estado "Inscritx"\n\n' +
+  function titulo(fila, texto, bg, fg) {
+    const r = hoja.getRange(fila, 1, 1, 6);
+    r.merge().setValue(texto)
+      .setBackground(bg || '#1565C0').setFontColor(fg || '#FFFFFF')
+      .setFontSize(13).setFontWeight('bold')
+      .setVerticalAlignment('middle').setWrap(true);
+    hoja.setRowHeight(fila, 32);
+  }
+  function subtitulo(fila, texto, bg) {
+    const r = hoja.getRange(fila, 1, 1, 6);
+    r.merge().setValue(texto)
+      .setBackground(bg || '#E3F2FD').setFontColor('#0D47A1')
+      .setFontSize(11).setFontWeight('bold')
+      .setVerticalAlignment('middle').setWrap(true);
+    hoja.setRowHeight(fila, 26);
+  }
+  function fila2(fila, colA, colB, bgA, bgB) {
+    hoja.getRange(fila, 1, 1, 2).merge().setValue(colA)
+      .setBackground(bgA || '#F5F5F5').setFontColor('#212121')
+      .setFontSize(10).setVerticalAlignment('middle').setWrap(true);
+    hoja.getRange(fila, 3, 1, 4).merge().setValue(colB)
+      .setBackground(bgB || '#FFFFFF').setFontColor('#424242')
+      .setFontSize(10).setVerticalAlignment('middle').setWrap(true);
+    hoja.setRowHeight(fila, 22);
+  }
+  function filaC(fila, texto, bg, bold) {
+    hoja.getRange(fila, 1, 1, 6).merge().setValue(texto)
+      .setBackground(bg || '#FFFFFF').setFontColor('#424242')
+      .setFontSize(10).setFontWeight(bold ? 'bold' : 'normal')
+      .setVerticalAlignment('middle').setWrap(true);
+    hoja.setRowHeight(fila, 20);
+  }
+  function esp(fila) {
+    hoja.getRange(fila, 1, 1, 6).merge().setBackground('#FFFFFF');
+    hoja.setRowHeight(fila, 10);
+  }
 
-    '4. Durante el año:\n' +
-    '   • Cambia el estado de estudiantes en su hoja de grado\n' +
-    '   • Inscritx → normal   |   Retiradx → se retiró\n' +
-    '   • Graduadx → se pregunta si avanzar al siguiente grado\n' +
-    '     → Se crea en el mismo grado del AÑO SIGUIENTE\n' +
-    '     → La fila actual queda oculta (historial conservado)\n' +
-    '   • Quinto Bachillerato: Ciclo de Vida Terminado\n' +
-    '     → Se registra en "Seguimiento Graduados"\n\n' +
+  hoja.setColumnWidth(1, 200);
+  hoja.setColumnWidth(2, 110);
+  hoja.setColumnWidth(3, 110);
+  hoja.setColumnWidth(4, 110);
+  hoja.setColumnWidth(5, 110);
+  hoja.setColumnWidth(6, 110);
 
-    '5. Al final del año (cerrar ciclo):\n' +
-    '   • Actualiza SCHOOL_YEAR en el código al nuevo año\n' +
-    '   • DP Educación → 📅 Cerrar ciclo escolar\n' +
-    '   • Estudiantes Inscritx/Retiradx → nueva hoja del mismo grado año nuevo\n' +
-    '   • Hojas del año anterior quedan ocultas (no borradas)\n' +
-    '   • Para ver hojas ocultas: clic derecho en una pestaña → "Mostrar hojas"\n\n' +
+  let f = 1;
 
-    '🟡 ESTADOS Y SU SIGNIFICADO\n' +
-    '────────────────────────────\n' +
-    '  Inscritx            = Estudiante activo\n' +
-    '  Retiradx            = Se retiró del programa\n' +
-    '  Graduadx            = Completó el grado (avanza al siguiente año)\n' +
-    '  Ciclo de Vida Term. = Completó Quinto Bachillerato\n\n' +
+  // ── ENCABEZADO ────────────────────────────────────────────────────────────
+  titulo(f++, '📖  GUÍA DE USO — SISTEMA DP EDUCACIÓN', '#0D47A1', '#FFFFFF');
+  filaC(f++, 'Esta hoja explica para qué sirve cada pestaña, qué hace cada columna y cómo usar el sistema paso a paso.', '#E8EAF6');
+  esp(f++);
 
-    '🟢 GRADOS EN ORDEN\n' +
-    '────────────────────────────\n' +
-    '  1. Primera Etapa de Primaria\n' +
-    '  2. Segunda Etapa de Primaria\n' +
-    '  3. Primera Etapa de Básicos\n' +
-    '  4. Segunda Etapa de Básicos\n' +
-    '  5. Cuarto Bachillerato\n' +
-    '  6. Quinto Bachillerato  ← Último grado\n\n' +
+  // ── SECCIÓN 1: LAS HOJAS ──────────────────────────────────────────────────
+  titulo(f++, '🗂️  LAS HOJAS DEL SISTEMA', '#1565C0', '#FFFFFF');
+  esp(f++);
 
-    '🔴 SI ALGO SALE MAL\n' +
-    '────────────────────────────\n' +
-    '  • DP Educación → 🔁 Reiniciar sistema\n' +
-    '    (elimina todo y reinstala desde cero)\n' +
-    '  • PRECAUCIÓN: los datos se perderán\n\n' +
+  subtitulo(f++, '📋  Hoja de Interés  —  BANDEJA DE ENTRADA', '#E3F2FD');
+  filaC(f++, 'Aquí llegan las personas del formulario KoboToolbox que marcaron SÍ en "¿Deseas inscribirte en Educación?". Nadie de otros programas (Inclusión Laboral, etc.) entra. Desde acá se transfieren a su hoja de grado usando la columna "Acción".', '#FAFAFA');
+  esp(f++);
+  subtitulo(f++, '   Columnas de "Hoja de Interés"', '#EDE7F6');
+  fila2(f++, '  Col 1 · ID', 'Número interno. No editar.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 2 · Creamos ID', 'ID de KoboToolbox / Salesforce.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 3 · Nombre', 'Nombre completo del participante.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 4 · DPI', 'DPI. Evita duplicados: si el DPI ya existe no se importa de nuevo.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 5 · Fecha de Nac.', 'Tal como llegó del formulario.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 6 · Edad', 'Calculada automáticamente. No editar.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 7 · Género', 'Género declarado en el formulario.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 8 · Teléfono', 'Número de contacto.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 9 · Zona/Colonia', 'Lugar de residencia.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 10 · Último nivel', 'Último grado completado antes de entrar.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 11 · Grado Kobo', 'Grado sugerido por KoboToolbox según nivel declarado.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 12 · Papelería', 'Documentos faltantes. Se llena con el selector del menú.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  Col 13 · Comentario', 'Notas de seguimiento sobre papelería u otro asunto.', '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  ⬅ Col 14 · Acción  (LA MÁS IMPORTANTE)', 'Selecciona "Enviar a: [Grado]" → el participante se mueve automáticamente a esa hoja de grado. Cuando ya fue enviado muestra "✅ [Grado]" en gris.', '#CE93D8', '#F3E5F5');
+  esp(f++);
 
-    '💡 TIPS\n' +
-    '────────────────────────────\n' +
-    '  • El sync de Kobo corre automático cada hora si está activo\n' +
-    '  • No se crean duplicados: se compara por DPI\n' +
-    '  • Los comentarios de papelería se guardan como nota en el nombre\n' +
-    '  • Creamos ID viene directo de KoboToolbox para sincronizar con Salesforce';
+  subtitulo(f++, '📚  Hojas de Grado  (ej. "Primera Etapa de Primaria 2025")', '#E8F5E9');
+  filaC(f++, 'Una hoja por cada nivel y año. Al enviar a alguien desde "Hoja de Interés" aparece aquí como "Inscritx". Es el registro activo de cada grado.', '#FAFAFA');
+  esp(f++);
+  subtitulo(f++, '   Columnas de cada Hoja de Grado', '#DCEDC8');
+  fila2(f++, '  Col 1 · ID', 'ID dentro de esta hoja.', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  Col 2 · Creamos ID', 'Mismo ID de Interés.', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  Col 3 · Nombre', 'Nombre completo.', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  Col 4 · DPI', 'Documento de identidad.', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  Col 5 · Teléfono', 'Contacto.', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  Col 6 · Edad', 'Edad del participante.', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  Col 7 · Grado', 'Nombre del nivel (ej. Primera Etapa de Primaria).', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  Col 8 · Modalidad', '"Presencial" o "Semi-presencial". Selección manual.', '#F1F8E9', '#FAFAFA');
+  fila2(f++, '  ⬅ Col 9 · Estado  (LA MÁS IMPORTANTE)', '"Inscritx" = activo  |  "Retiradx" = se fue (fila se oculta)  |  "Graduadx" = completó el grado, el sistema pregunta si avanzar al año siguiente  |  "Ciclo de Vida Terminado" (solo Quinto Bach.) = pasa a Seguimiento Graduados.', '#A5D6A7', '#E8F5E9');
+  esp(f++);
 
-  ui.alert('Guía de Uso', guia, ui.ButtonSet.OK);
+  subtitulo(f++, '🎓  Seguimiento Graduados', '#FFF3E0');
+  filaC(f++, 'Para quienes terminaron Quinto Bachillerato (último grado). Permite dar seguimiento de qué pasó con ellos después: empleo, estudios, etc.', '#FAFAFA');
+  esp(f++);
+  subtitulo(f++, '   Columnas de "Seguimiento Graduados"', '#FFE0B2');
+  fila2(f++, '  Col 1 · ID', 'ID autoasignado.', '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 2 · Nombre', 'Nombre completo del graduado.', '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 3 · DPI', 'Documento de identidad.', '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 4 · Teléfono', 'Contacto.', '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 5 · Edad', 'Edad al momento del registro.', '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 6 · Año de Graduación', 'Año en que completó Quinto Bachillerato.', '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 7 · Estado Post-Grad', '"Seguimiento activo"  "Empleado"  "Continúa estudiando"  "Sin contacto"  "Emigró"', '#FFCC80', '#FFF8E1');
+  fila2(f++, '  Col 8 · Observación', 'Notas libres de seguimiento.', '#FFF8E1', '#FAFAFA');
+  esp(f++);
+
+  // ── SECCIÓN 2: EL MENÚ ───────────────────────────────────────────────────
+  titulo(f++, '🍽️  EL MENÚ "DP Educación" — QUÉ HACE CADA OPCIÓN', '#1B5E20', '#FFFFFF');
+  esp(f++);
+  fila2(f++, '  ⚙️ Configurar hoja Interés', 'Crea o resetea la Hoja de Interés con encabezados y validaciones. Usar al inicio del año o si la hoja quedó dañada.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  🔧 Instalar trigger', 'Activa el detector de edición (onEdit). Necesario para que la columna "Acción" transfiera sola. Ejecutar una sola vez.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  📚 Crear hoja de grado', 'Crea la hoja de un grado para el año actual. "✨ Crear TODOS" crea los 6 grados de golpe.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  📋 Seleccionar papelería', 'Marca los documentos que le faltan al participante. Se guardan en la columna "Papelería".', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  🔄 Procesar acciones', 'Transfiere en lote a todos los de "Hoja de Interés" que tengan grado seleccionado pero aún no enviados.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  📊 Ver resumen', 'Muestra conteo de estudiantes por grado y estado.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  📅 Cerrar ciclo escolar', 'Fin de año: mueve Inscritx/Retiradx al año nuevo y oculta hojas anteriores. Actualiza SCHOOL_YEAR antes de usarlo.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  🎓 Seguimiento', '"Configurar" crea la hoja. "Registrar graduado manual" agrega a alguien que ya terminó sin estar en el sistema.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  🔑 KoboToolbox · Token', 'Guarda el token de API. Necesario la primera vez o si el token expira.', '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  📦 KoboToolbox · Histórico', 'Importa registros del formulario antiguo. Solo usar una vez para migración inicial.', '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  🔄 KoboToolbox · Sync manual', 'Importa los registros nuevos del formulario actual. Solo entran personas con Educación = Sí.', '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  🔁 Sync automático (c/min)  ⬅', 'Activa sincronización cada minuto. KoboToolbox se revisa solo sin hacer nada.', '#CE93D8', '#F3E5F5');
+  fila2(f++, '  ⛔ Detener sync automático', 'Desactiva el sync cada minuto.', '#EDE7F6', '#FAFAFA');
+  esp(f++);
+
+  // ── SECCIÓN 3: FLUJO PASO A PASO ─────────────────────────────────────────
+  titulo(f++, '🔵  FLUJO COMPLETO PASO A PASO', '#1565C0', '#FFFFFF');
+  esp(f++);
+
+  subtitulo(f++, 'PASO 1 — Configuración inicial (solo una vez al año)', '#E3F2FD');
+  filaC(f++, '1a.  Menú → ⚙️ Configurar hoja Interés', '#FAFAFA');
+  filaC(f++, '1b.  Menú → 📚 Crear hoja de grado → ✨ Crear TODOS los grados', '#FAFAFA');
+  filaC(f++, '1c.  Menú → 🔧 Instalar trigger automático', '#FAFAFA');
+  filaC(f++, '1d.  Menú → 🌐 KoboToolbox → 🔑 Configurar token de API', '#FAFAFA');
+  filaC(f++, '1e.  Menú → 🌐 KoboToolbox → 🔁 Sync automático (cada minuto)  ← activa la magia', '#FFF9C4');
+  esp(f++);
+
+  subtitulo(f++, 'PASO 2 — Llegan inscritos nuevos (automático)', '#E8F5E9');
+  filaC(f++, 'El sync automático jala los datos solos cada minuto. También puedes hacerlo manualmente:', '#FAFAFA');
+  filaC(f++, '2a.  Menú → 🌐 KoboToolbox → 🔄 Sync → hoja Interés (actual)', '#FAFAFA');
+  filaC(f++, '2b.  Solo personas con "¿Deseas inscribirte en Educación? = Sí" aparecen en Hoja de Interés', '#FAFAFA');
+  filaC(f++, '2c.  La columna "Grado Kobo" ya sugiere a qué grado va cada quien', '#FAFAFA');
+  esp(f++);
+
+  subtitulo(f++, 'PASO 3 — Transferir participantes a su grado', '#FFF3E0');
+  filaC(f++, '3a.  En "Hoja de Interés", busca la fila del participante', '#FAFAFA');
+  filaC(f++, '3b.  En columna "Acción" (última columna), selecciona "Enviar a: [Grado]"', '#FAFAFA');
+  filaC(f++, '3c.  El participante aparece automáticamente en su hoja de grado como "Inscritx"', '#FAFAFA');
+  filaC(f++, '3d.  La columna "Acción" cambia a "✅ [Grado]" — ya fue enviado', '#FAFAFA');
+  filaC(f++, '  →  También puedes ir a Menú → 🔄 Procesar acciones para enviar a todos de golpe', '#F5F5F5');
+  esp(f++);
+
+  subtitulo(f++, 'PASO 4 — Durante el ciclo escolar', '#EDE7F6');
+  filaC(f++, '4a.  En la hoja de grado, cambia el "Estado" de cada estudiante según corresponda', '#FAFAFA');
+  filaC(f++, '4b.  "Inscritx" = activo  |  "Retiradx" = se fue  |  "Graduadx" = completó el grado', '#FAFAFA');
+  filaC(f++, '4c.  Al poner "Graduadx" el sistema pregunta si avanzarlo al mismo grado en el año siguiente', '#FAFAFA');
+  filaC(f++, '4d.  En Quinto Bachillerato: "Ciclo de Vida Terminado" → pasa a Seguimiento Graduados', '#FAFAFA');
+  esp(f++);
+
+  subtitulo(f++, 'PASO 5 — Fin del ciclo escolar', '#DCEDC8');
+  filaC(f++, '5a.  Actualiza SCHOOL_YEAR en el código de Apps Script al año nuevo', '#FAFAFA');
+  filaC(f++, '5b.  Menú → 📅 Cerrar ciclo escolar', '#FAFAFA');
+  filaC(f++, '5c.  Los "Inscritx"/"Retiradx" pasan a hojas del año nuevo. Los "Graduadx" al siguiente grado.', '#FAFAFA');
+  filaC(f++, '5d.  Las hojas del año anterior se ocultan (el historial NO se borra)', '#FAFAFA');
+  filaC(f++, '  →  Para ver hojas ocultas: clic derecho en cualquier pestaña → "Mostrar hojas"', '#F5F5F5');
+  esp(f++);
+
+  // ── SECCIÓN 4: ESTADOS ───────────────────────────────────────────────────
+  titulo(f++, '🟡  ESTADOS Y QUÉ SIGNIFICAN', '#F57F17', '#FFFFFF');
+  esp(f++);
+  fila2(f++, '  Inscritx',                'Estudiante activo en el grado.',                                                 '#A5D6A7', '#E8F5E9');
+  fila2(f++, '  Retiradx',                'Se retiró del programa. La fila se oculta pero no se borra.',                    '#EF9A9A', '#FFEBEE');
+  fila2(f++, '  Graduadx',                'Completó el grado. Se pregunta si avanzar al año siguiente.',                   '#81D4FA', '#E1F5FE');
+  fila2(f++, '  Ciclo de Vida Terminado', 'Solo Quinto Bachillerato. Completó todo el programa → pasa a Seguimiento.',     '#CE93D8', '#F3E5F5');
+  esp(f++);
+
+  // ── SECCIÓN 5: ORDEN GRADOS ──────────────────────────────────────────────
+  titulo(f++, '🟢  ORDEN DE LOS GRADOS', '#2E7D32', '#FFFFFF');
+  esp(f++);
+  fila2(f++, '  1°  Primera Etapa de Primaria',  'Nivel más básico.',                                            '#C8E6C9', '#F1F8E9');
+  fila2(f++, '  2°  Segunda Etapa de Primaria', '',                                                              '#C8E6C9', '#F1F8E9');
+  fila2(f++, '  3°  Primera Etapa de Básicos',  '',                                                              '#A5D6A7', '#E8F5E9');
+  fila2(f++, '  4°  Segunda Etapa de Básicos',  '',                                                              '#A5D6A7', '#E8F5E9');
+  fila2(f++, '  5°  Cuarto Bachillerato',        '',                                                              '#81C784', '#E8F5E9');
+  fila2(f++, '  6°  Quinto Bachillerato',        'Último grado → al terminar pasa a Seguimiento Graduados.',    '#4CAF50', '#E8F5E9');
+  esp(f++);
+
+  // ── SECCIÓN 6: TIPS ──────────────────────────────────────────────────────
+  titulo(f++, '💡  TIPS Y PROBLEMAS COMUNES', '#4A148C', '#FFFFFF');
+  esp(f++);
+  subtitulo(f++, 'Tips generales', '#EDE7F6');
+  filaC(f++, '✔  El sync filtra SOLO personas de Educación (marcaron Sí). Nadie de Inclusión Laboral ni otros programas entra.', '#FAFAFA');
+  filaC(f++, '✔  No se crean duplicados: el sistema compara por DPI antes de importar.', '#FAFAFA');
+  filaC(f++, '✔  Creamos ID viene de KoboToolbox para mantener sincronía con Salesforce.', '#FAFAFA');
+  filaC(f++, '✔  Los comentarios de papelería se guardan como nota flotante en la celda del nombre.', '#FAFAFA');
+  filaC(f++, '✔  El historial NUNCA se borra, solo se oculta. Siempre puedes ver hojas y filas anteriores.', '#FAFAFA');
+  esp(f++);
+  subtitulo(f++, 'Problemas comunes y soluciones', '#FFCDD2');
+  fila2(f++, '  No llegan datos del sync',       'Revisar: 1) Token de API configurado  2) Sync automático activo  3) Conexión a internet', '#FFEBEE', '#FAFAFA');
+  fila2(f++, '  La "Acción" no transfiere solo', 'Reinstalar el trigger: Menú → 🔧 Instalar trigger automático', '#FFEBEE', '#FAFAFA');
+  fila2(f++, '  Hoja de grado no existe',         'Crearla: Menú → 📚 Crear hoja de grado → elegir el grado', '#FFEBEE', '#FAFAFA');
+  fila2(f++, '  Sistema dañado o raro',           'Menú → 🔁 Reiniciar sistema  (PRECAUCIÓN: borra y recrea todo)', '#FFCDD2', '#FFEBEE');
+  esp(f++);
+
+  titulo(f++, '📖  Para actualizar esta guía: menú → 📖 Guía de uso', '#37474F', '#FFFFFF');
+
+  hoja.setHiddenGridlines(true);
+  SpreadsheetApp.setActiveSheet(hoja);
+  ss.toast('Hoja "📖 Guía de Uso" lista.', '📖 Guía de Uso', 5);
 }
 
 
@@ -1679,11 +1831,11 @@ function koboInstalarTriggerSync() {
     .forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
   ScriptApp.newTrigger('koboSincronizarHojaInteres')
-    .timeBased().everyHours(1).create();
+    .timeBased().everyMinutes(1).create();
 
   ui.alert(
     '✅ Sync automático activado\n\n' +
-    'Cada hora se agregarán automáticamente los registros nuevos de\n' +
+    'Cada minuto se agregarán automáticamente los registros nuevos de\n' +
     'KoboToolbox a la hoja "Interés".\n\n' +
     'Para detenerlo: menú → 🌐 KoboToolbox → ⛔ Detener sync automático'
   );
