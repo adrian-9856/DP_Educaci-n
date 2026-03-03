@@ -993,7 +993,9 @@ function reiniciarSistema() {
     'Esta acción eliminará PERMANENTEMENTE:\n\n' +
     '• Hoja de Interés (todos los registros)\n' +
     '• Todas las hojas de grado (todos los años)\n' +
-    '• Hoja Seguimiento Graduados\n\n' +
+    '• Hoja Seguimiento Graduados\n' +
+    '• Hoja Referencias a Educación\n' +
+    '• Hoja Lista de Espera\n\n' +
     '⚠️ Los datos NO se pueden recuperar después.\n\n' +
     '¿Estás seguro de que quieres continuar?',
     ui.ButtonSet.YES_NO
@@ -1013,9 +1015,9 @@ function reiniciarSistema() {
   // 1. Eliminar todos los triggers del proyecto
   ScriptApp.getProjectTriggers().forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
-  // 2. Identificar hojas a eliminar (Interés + grados todos los años + Seguimiento)
+  // 2. Identificar hojas a eliminar (Interés + grados todos los años + Seguimiento + Referencias + Lista de Espera)
   const hojas       = ss.getSheets();
-  const nombresDP   = [HOJA_INTERES, HOJA_SEGUIMIENTO];
+  const nombresDP   = [HOJA_INTERES, HOJA_SEGUIMIENTO, HOJA_REFERENCIAS, HOJA_LISTA_ESPERA];
   // Incluir cualquier hoja cuyo nombre empiece con un grado conocido
   hojas.forEach(function(h) {
     const n = h.getName();
@@ -1040,10 +1042,12 @@ function reiniciarSistema() {
     try { ss.deleteSheet(h); } catch(e) { /* hoja ya eliminada o protegida */ }
   });
 
-  // Reinstalar todo (crea Interés + grados + Seguimiento + triggers)
+  // Reinstalar todo (crea Interés + grados + Seguimiento + Referencias + Lista de Espera + triggers)
   setupHojaInteres();
   crearTodasLasHojas();
   setupHojaSeguimiento();
+  setupHojaReferencias();
+  setupHojaListaEspera();
   installTriggers();
 
   // Ahora que existen las hojas nuevas, eliminar la temporal
@@ -1055,6 +1059,8 @@ function reiniciarSistema() {
     '• Hoja de Interés\n' +
     '• ' + GRADOS.length + ' hojas de grado (' + SCHOOL_YEAR + ')\n' +
     '• Hoja Seguimiento Graduados\n' +
+    '• Hoja Referencias a Educación\n' +
+    '• Hoja Lista de Espera\n' +
     '• Triggers automáticos\n\n' +
     '💡 Recuerda configurar el token de KoboToolbox en:\n' +
     '   🌐 KoboToolbox → 🔑 Configurar token de API'
