@@ -32,21 +32,37 @@ const COL_INTERES = {
   ACCION:      14   // Desplegable: Enviar a grado
 };
 
-// Columnas de "Referencias a Educación" y "Lista de Espera" (1-based) — 11 columnas
+// Columnas de "Referencias a Educación" (1-based) — 14 columnas
 const COL_REF = {
-  CREAMOS_ID:  1,   // Creamos ID
-  NOMBRE:      2,   // Nombre Completo
-  NOMBRE_PREF: 3,   // Nombre Preferido
-  DPI:         4,   // DPI / CUI
-  FECHA_NAC:   5,   // Fecha de Nacimiento
-  EDAD:        6,   // Edad (calculada)
-  GENERO:      7,   // Género
-  TELEFONO:    8,   // Teléfono
-  ZONA:        9,   // Zona / Colonia
-  ULTIMO_ANIO: 10,  // Último Nivel Cursado
-  ACCION:      11   // Acción (→ListaEspera en Referencias; →Grado en Lista)
+  CREAMOS_ID:     1,   // Creamos ID
+  NOMBRE:         2,   // Nombre Completo
+  NOMBRE_PREF:    3,   // Nombre Preferido
+  DPI:            4,   // DPI / CUI
+  FECHA_NAC:      5,   // Fecha de Nacimiento
+  EDAD:           6,   // Edad (calculada)
+  GENERO:         7,   // Género
+  TELEFONO:       8,   // Teléfono
+  ZONA:           9,   // Zona / Colonia
+  ULTIMO_ANIO:   10,   // Último Nivel Cursado
+  FECHA_REF:     11,   // Fecha de Referencia (de KoboToolbox)
+  RESPONSABLE:   12,   // Responsable de la Referencia
+  ESTADO_ESTUDIO:13,   // Estado del Estudio
+  ACCION:        14    // Acción (→Lista de Espera)
 };
-const COL_LISTA = COL_REF;  // misma estructura; ACCION envía al grado
+// Columnas de "Lista de Espera" (1-based) — 11 columnas (estructura original)
+const COL_LISTA = {
+  CREAMOS_ID:  1,
+  NOMBRE:      2,
+  NOMBRE_PREF: 3,
+  DPI:         4,
+  FECHA_NAC:   5,
+  EDAD:        6,
+  GENERO:      7,
+  TELEFONO:    8,
+  ZONA:        9,
+  ULTIMO_ANIO: 10,
+  ACCION:      11   // Acción → Enviar a grado
+};
 
 // Columnas de cada hoja de grado (1-based) — 9 columnas totales
 const COL_GRADO = {
@@ -1347,7 +1363,9 @@ function setupHojaReferencias() {
   const ENCABEZADOS = [
     'Creamos ID', 'Nombre Completo', 'Nombre Preferido', 'DPI / CUI',
     'Fecha de Nacimiento', 'Edad', 'Género', 'Teléfono',
-    'Zona / Colonia', 'Último Nivel Cursado', 'Acción'
+    'Zona / Colonia', 'Último Nivel Cursado',
+    'Fecha de Referencia', 'Responsable de Referencia', 'Estado del Estudio',
+    'Acción'
   ];
   const ACCIONES_REF = ['-- Seleccionar --', 'Enviar a: Lista de Espera'];
 
@@ -1386,7 +1404,8 @@ function setupHojaReferencias() {
 
   ui.alert(
     '✅ Hoja "' + HOJA_REFERENCIAS + '" configurada.\n\n' +
-    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción\n\n' +
+    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Fecha de Referencia · Responsable · Estado del Estudio · Acción\n\n' +
+    '⚠️ El Sync importa SOLO registros referidos a Educación.\n\n' +
     'Acción disponible: "Enviar a: Lista de Espera"\n\n' +
     'Usa Menú → 🌐 KoboToolbox → 🔄 Sync → Referencias para importar datos.'
   );
@@ -1500,7 +1519,7 @@ function _transInteresAListaEspera(fila) {
 function _transReferenciasAListaEspera(fila) {
   const ss      = SpreadsheetApp.getActiveSpreadsheet();
   const hojaRef = ss.getSheetByName(HOJA_REFERENCIAS);
-  const datos   = hojaRef.getRange(fila, 1, 1, 11).getValues()[0];
+  const datos   = hojaRef.getRange(fila, 1, 1, 14).getValues()[0];
 
   const nombre = datos[COL_REF.NOMBRE - 1];
   if (!nombre) {
@@ -1528,7 +1547,7 @@ function _transReferenciasAListaEspera(fila) {
   hojaLista.setRowHeight(filaDestino, 24);
 
   // Marcar origen como enviado
-  hojaRef.getRange(fila, 1, 1, 11).setBackground('#EDE7F6');
+  hojaRef.getRange(fila, 1, 1, 14).setBackground('#EDE7F6');
   hojaRef.getRange(fila, COL_REF.ACCION)
     .setValue('✅ Lista de Espera').setDataValidation(null);
 
@@ -1673,9 +1692,28 @@ function _koboSincronizarReferenciasInterno(url) {
     if (idx.ZONA        < 0) idx.ZONA        = _col('Zona');
     if (idx.ZONA        < 0) idx.ZONA        = _colFuzzy('zona');
 
+    idx.ZONA_ESPEC  = _colFuzzy('especifique zona');
+    if (idx.ZONA_ESPEC  < 0) idx.ZONA_ESPEC  = _colFuzzy('especifique');
+
     idx.ULTIMO_ANIO = _col('Último Nivel Cursado');
     if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('ultimo nivel');
     if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('nivel de estudios');
+
+    // Columnas nuevas: filtro programa + datos extra de Educación
+    idx.PROGRAMA       = _colFuzzy('a que programa se refiere');
+    if (idx.PROGRAMA   < 0) idx.PROGRAMA     = _colFuzzy('programa se refiere');
+    if (idx.PROGRAMA   < 0) idx.PROGRAMA     = _colFuzzy('programa');
+
+    idx.FECHA_REF      = _col('Fecha de Referencia');
+    if (idx.FECHA_REF  < 0) idx.FECHA_REF    = _colFuzzy('fecha de referencia');
+
+    idx.RESPONSABLE    = _colFuzzy('nombre del responsable de la referencia');
+    if (idx.RESPONSABLE< 0) idx.RESPONSABLE  = _colFuzzy('responsable de la referencia');
+    if (idx.RESPONSABLE< 0) idx.RESPONSABLE  = _colFuzzy('responsable');
+
+    idx.ESTADO_ESTUDIO = _col('Estado del estudio');
+    if (idx.ESTADO_ESTUDIO < 0) idx.ESTADO_ESTUDIO = _colFuzzy('estado del estudio');
+    if (idx.ESTADO_ESTUDIO < 0) idx.ESTADO_ESTUDIO = _colFuzzy('estado estudio');
 
     // DPIs ya en la hoja
     const ss            = SpreadsheetApp.getActiveSpreadsheet();
@@ -1694,6 +1732,12 @@ function _koboSincronizarReferenciasInterno(url) {
     const filasNuevas = [];
 
     rows.slice(1).forEach(function(row) {
+      // ── Filtrar: solo referidos a Educación ──────────────────────────────
+      if (idx.PROGRAMA >= 0) {
+        const prog = _norm(String(row[idx.PROGRAMA] || ''));
+        if (prog && prog.indexOf('educaci') < 0) { omitidos++; return; }
+      }
+
       const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
       if (dpi && dpisExistentes.has(dpi)) { omitidos++; return; }
 
@@ -1710,8 +1754,16 @@ function _koboSincronizarReferenciasInterno(url) {
       const fechaNac   = idx.FECHA_NAC   >= 0 ? String(row[idx.FECHA_NAC]   || '').trim() : '';
       const genero     = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
       const telefono   = idx.TELEFONO    >= 0 ? String(row[idx.TELEFONO]    || '').trim() : '';
-      const zona       = idx.ZONA        >= 0 ? String(row[idx.ZONA]        || '').trim() : '';
-      const ultimoAnio = idx.ULTIMO_ANIO >= 0 ? String(row[idx.ULTIMO_ANIO] || '').trim() : '';
+      // Combinar Zona / Colonia + Especifique zona
+      let zona = idx.ZONA >= 0 ? String(row[idx.ZONA] || '').trim() : '';
+      if (idx.ZONA_ESPEC >= 0) {
+        const zonaesp = String(row[idx.ZONA_ESPEC] || '').trim();
+        if (zonaesp && zonaesp !== zona) zona = zona ? zona + ' - ' + zonaesp : zonaesp;
+      }
+      const ultimoAnio      = idx.ULTIMO_ANIO     >= 0 ? String(row[idx.ULTIMO_ANIO]     || '').trim() : '';
+      const fechaRef        = idx.FECHA_REF       >= 0 ? String(row[idx.FECHA_REF]       || '').trim() : '';
+      const responsable     = idx.RESPONSABLE     >= 0 ? String(row[idx.RESPONSABLE]     || '').trim() : '';
+      const estadoEstudio   = idx.ESTADO_ESTUDIO  >= 0 ? String(row[idx.ESTADO_ESTUDIO]  || '').trim() : '';
 
       // Calcular edad desde fecha de nacimiento
       let edad = '';
@@ -1727,6 +1779,7 @@ function _koboSincronizarReferenciasInterno(url) {
       filasNuevas.push([
         creamosId, nombre, nombrePref, dpi,
         fechaNac, edad, genero, telefono, zona, ultimoAnio,
+        fechaRef, responsable, estadoEstudio,
         '-- Seleccionar --'
       ]);
       importados++;
@@ -1734,7 +1787,7 @@ function _koboSincronizarReferenciasInterno(url) {
 
     if (filasNuevas.length > 0) {
       const filaInicio = Math.max(hojaRef.getLastRow() + 1, 2);
-      hojaRef.getRange(filaInicio, 1, filasNuevas.length, 11).setValues(filasNuevas);
+      hojaRef.getRange(filaInicio, 1, filasNuevas.length, 14).setValues(filasNuevas);
       // Aplicar validación de Acción en las filas nuevas
       const valAccion = SpreadsheetApp.newDataValidation()
         .requireValueInList(['-- Seleccionar --', 'Enviar a: Lista de Espera'], true)
