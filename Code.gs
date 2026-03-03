@@ -97,7 +97,7 @@ const MODALIDADES    = ['Presencial', 'Semi-presencial'];
 const ESTADOS        = ['Inscritx', 'Retiradx', 'Graduadx'];
 // Estado especial para Quinto Bachillerato al completar el ciclo
 const ESTADOS_QUINTO = ['Inscritx', 'Retiradx', 'Ciclo de Vida Terminado'];
-const ACCIONES       = ['-- Seleccionar --', ...GRADOS.map(g => 'Enviar a: ' + g)];
+const ACCIONES       = ['-- Seleccionar --', 'Enviar a: Lista de Espera'];
 const ULTIMO_ANIO_OPCIONES = [
   'Sin estudios previos',
   'Primera Etapa de Primaria',
@@ -683,6 +683,12 @@ function onEdit(e) {
   const fila      = range.getRow();
   const valor     = (e.value || '').toString().trim();
 
+  // ── Transferir desde Hoja de Interés → Lista de Espera ──────────────────
+  if (nombreH === HOJA_INTERES && col === COL_INTERES.ACCION && fila >= 2) {
+    if (valor === 'Enviar a: Lista de Espera') _transInteresAListaEspera(fila);
+    return;
+  }
+
   // ── Transferir desde Referencias a Educación → Lista de Espera ─────────
   if (nombreH === HOJA_REFERENCIAS && col === COL_REF.ACCION && fila >= 2) {
     if (valor === 'Enviar a: Lista de Espera') _transReferenciasAListaEspera(fila);
@@ -845,10 +851,10 @@ function procesarAccionesPendientes() {
   acciones.forEach(function(row, idx) {
     const v = (row[0] || '').toString().trim();
     if (!v || v === '-- Seleccionar --' || v.charAt(0) === '✅') return;
-    const grado = v.replace('Enviar a: ', '').trim();
-    if (GRADOS.indexOf(grado) < 0) return;
-    _transferirEstudiante(idx + 2, grado);
-    procesados++;
+    if (v === 'Enviar a: Lista de Espera') {
+      _transInteresAListaEspera(idx + 2);
+      procesados++;
+    }
   });
 
   ui.alert(procesados === 0
@@ -1439,6 +1445,59 @@ function setupHojaListaEspera() {
 ' +
     'Acción: selecciona "Enviar a: [Grado]" para transferir a la hoja de grado.'
   );
+}
+
+// ── 9.2b Transferir Hoja de Interés → Lista de Espera ───────────────────────
+// Solo copia la fila — el origen queda marcado con ✅ pero NO se borra ni oculta.
+function _transInteresAListaEspera(fila) {
+  const ss          = SpreadsheetApp.getActiveSpreadsheet();
+  const hojaInteres = ss.getSheetByName(HOJA_INTERES);
+  const datos       = hojaInteres.getRange(fila, 1, 1, 14).getValues()[0];
+
+  const nombre = datos[COL_INTERES.NOMBRE - 1];
+  if (!nombre) {
+    SpreadsheetApp.getUi().alert('⚠️ La fila no tiene nombre. No se realizó la copia.');
+    hojaInteres.getRange(fila, COL_INTERES.ACCION).setValue('-- Seleccionar --');
+    return;
+  }
+
+  let hojaLista = ss.getSheetByName(HOJA_LISTA_ESPERA);
+  if (!hojaLista) {
+    setupHojaListaEspera();
+    hojaLista = ss.getSheetByName(HOJA_LISTA_ESPERA);
+  }
+
+  // Construir la fila destino en estructura de Lista de Espera (11 cols)
+  const filaDestino = Math.max(hojaLista.getLastRow() + 1, 2);
+  const filaLista = [
+    datos[COL_INTERES.CREAMOS_ID  - 1] || '',   // Creamos ID
+    datos[COL_INTERES.NOMBRE      - 1] || '',   // Nombre Completo
+    datos[COL_INTERES.NOMBRE_PREF - 1] || '',   // Nombre Preferido
+    datos[COL_INTERES.DPI         - 1] || '',   // DPI / CUI
+    datos[COL_INTERES.FECHA_NAC   - 1] || '',   // Fecha de Nacimiento
+    datos[COL_INTERES.EDAD        - 1] || '',   // Edad
+    datos[COL_INTERES.GENERO      - 1] || '',   // Género
+    datos[COL_INTERES.TELEFONO    - 1] || '',   // Teléfono
+    datos[COL_INTERES.ZONA        - 1] || '',   // Zona / Colonia
+    datos[COL_INTERES.ULTIMO_ANIO - 1] || '',   // Último Nivel Cursado
+    '-- Seleccionar --'                          // Acción (vacía al llegar)
+  ];
+
+  hojaLista.getRange(filaDestino, 1, 1, 11).setValues([filaLista]);
+  hojaLista.setRowHeight(filaDestino, 24);
+
+  // Aplicar validación de Acción → grado en la fila recién creada
+  const valAccion = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['-- Seleccionar --', ...GRADOS.map(function(g) { return 'Enviar a: ' + g; })], true)
+    .setAllowInvalid(false).build();
+  hojaLista.getRange(filaDestino, COL_LISTA.ACCION).setDataValidation(valAccion);
+
+  // Marcar origen como copiado — fondo verde + ✅ en Acción. La fila NO se borra ni oculta.
+  hojaInteres.getRange(fila, 1, 1, 14).setBackground('#E8F5E9');
+  hojaInteres.getRange(fila, COL_INTERES.ACCION)
+    .setValue('✅ Lista de Espera').setDataValidation(null);
+
+  ss.toast('"' + nombre + '" copiado → Lista de Espera', '✅ Copiado', 5);
 }
 
 // ── 9.3  Transferir Referencias → Lista de Espera ────────────────────────────
