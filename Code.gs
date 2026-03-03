@@ -7,7 +7,9 @@
 //  SECCIÓN 1 · CONSTANTES GLOBALES
 // ────────────────────────────────────────────────────────────────────────────
 
-const HOJA_INTERES = 'Hoja de Interés';
+const HOJA_INTERES      = 'Hoja de Interés';
+const HOJA_REFERENCIAS  = 'Referencias a Educación';
+const HOJA_LISTA_ESPERA = 'Lista de Espera';
 
 // Año del ciclo escolar activo — cambia aquí cada año
 const SCHOOL_YEAR = 2026;
@@ -29,6 +31,22 @@ const COL_INTERES = {
   COMENTARIO:  13,  // Comentarios de papelería
   ACCION:      14   // Desplegable: Enviar a grado
 };
+
+// Columnas de "Referencias a Educación" y "Lista de Espera" (1-based) — 11 columnas
+const COL_REF = {
+  CREAMOS_ID:  1,   // Creamos ID
+  NOMBRE:      2,   // Nombre Completo
+  NOMBRE_PREF: 3,   // Nombre Preferido
+  DPI:         4,   // DPI / CUI
+  FECHA_NAC:   5,   // Fecha de Nacimiento
+  EDAD:        6,   // Edad (calculada)
+  GENERO:      7,   // Género
+  TELEFONO:    8,   // Teléfono
+  ZONA:        9,   // Zona / Colonia
+  ULTIMO_ANIO: 10,  // Último Nivel Cursado
+  ACCION:      11   // Acción (→ListaEspera en Referencias; →Grado en Lista)
+};
+const COL_LISTA = COL_REF;  // misma estructura; ACCION envía al grado
 
 // Columnas de cada hoja de grado (1-based) — 9 columnas totales
 const COL_GRADO = {
@@ -89,7 +107,9 @@ const ULTIMO_ANIO_OPCIONES = [
   'Cuarto Bachillerato'
 ];
 
-const COLOR_HEADER_INTERES = '#1565C0';
+const COLOR_HEADER_INTERES     = '#1565C0';
+const COLOR_HEADER_REFERENCIAS = '#6A1B9A';  // morado
+const COLOR_HEADER_LISTA       = '#E65100';  // naranja
 const COLOR_HEADER_GRADO   = '#2E7D32';
 const COLOR_FONT_HEADER    = '#FFFFFF';
 
@@ -224,6 +244,8 @@ function onOpen() {
     .addItem('📖  Guía de uso',                    'mostrarGuiaDeUso')
     .addSeparator()
     .addItem('⚙️  Configurar hoja Interés',        'setupHojaInteres')
+    .addItem('📥 Configurar Referencias a Educ.',   'setupHojaReferencias')
+    .addItem('⏳ Configurar Lista de Espera',        'setupHojaListaEspera')
     .addItem('🔧  Instalar trigger automático',     'installTriggers')
     .addSeparator()
     .addSubMenu(
@@ -252,6 +274,7 @@ function onOpen() {
         .addSeparator()
         .addItem('📦 Importar datos HISTÓRICOS',      'koboImportarHistorico')
         .addItem('🔄 Sync → hoja Interés (actual)',   'koboSincronizarHojaInteres')
+        .addItem('🔄 Sync → Referencias a Educación', 'koboSincronizarReferencias')
         .addSeparator()
         .addItem('🔁 Sync automático (cada minuto)',  'koboInstalarTriggerSync')
         .addItem('⛔ Detener sync automático',          'koboEliminarTriggerSync')
@@ -660,11 +683,17 @@ function onEdit(e) {
   const fila      = range.getRow();
   const valor     = (e.value || '').toString().trim();
 
-  // ── Transferir desde Interés ──────────────────────────────────────────────
-  if (nombreH === HOJA_INTERES && col === COL_INTERES.ACCION && fila >= 2) {
+  // ── Transferir desde Referencias a Educación → Lista de Espera ─────────
+  if (nombreH === HOJA_REFERENCIAS && col === COL_REF.ACCION && fila >= 2) {
+    if (valor === 'Enviar a: Lista de Espera') _transReferenciasAListaEspera(fila);
+    return;
+  }
+
+  // ── Transferir desde Lista de Espera → Hoja de Grado ─────────────────────
+  if (nombreH === HOJA_LISTA_ESPERA && col === COL_LISTA.ACCION && fila >= 2) {
     if (!valor || valor === '-- Seleccionar --') return;
     const grado = valor.replace('Enviar a: ', '').trim();
-    if (GRADOS.indexOf(grado) >= 0) _transferirEstudiante(fila, grado);
+    if (GRADOS.indexOf(grado) >= 0) _transListaEsperaAGrado(fila, grado);
     return;
   }
 
@@ -1294,6 +1323,395 @@ function removeTriggers() {
 //  3. Opcional: 🔁 Sync automático (cada hora)
 //
 // ────────────────────────────────────────────────────────────────────────────
+
+// ════════════════════════════════════════════════════════════════════════════
+//  SECCIÓN 9 · REFERENCIAS A EDUCACIÓN & LISTA DE ESPERA
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── 9.1  Configurar hoja "Referencias a Educación" ───────────────────────────
+function setupHojaReferencias() {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const ui   = SpreadsheetApp.getUi();
+  const ENCABEZADOS = [
+    'Creamos ID', 'Nombre Completo', 'Nombre Preferido', 'DPI / CUI',
+    'Fecha de Nacimiento', 'Edad', 'Género', 'Teléfono',
+    'Zona / Colonia', 'Último Nivel Cursado', 'Acción'
+  ];
+  const ACCIONES_REF = ['-- Seleccionar --', 'Enviar a: Lista de Espera'];
+
+  let hoja = ss.getSheetByName(HOJA_REFERENCIAS);
+  if (!hoja) {
+    hoja = ss.insertSheet(HOJA_REFERENCIAS);
+  } else {
+    hoja.clearContents();
+    hoja.clearFormats();
+    try { hoja.clearDataValidations(); } catch(e) {}
+  }
+
+  // Fila 1 — encabezados
+  const rHead = hoja.getRange(1, 1, 1, ENCABEZADOS.length);
+  rHead.setValues([ENCABEZADOS])
+    .setBackground(COLOR_HEADER_REFERENCIAS).setFontColor(COLOR_FONT_HEADER)
+    .setFontWeight('bold').setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  hoja.setFrozenRows(1);
+  hoja.setRowHeight(1, 32);
+
+  // Anchos de columna
+  [180, 220, 150, 130, 130, 60, 90, 110, 150, 200, 200].forEach(function(w, i) {
+    hoja.setColumnWidth(i + 1, w);
+  });
+
+  // Validación Acción (columna 11)
+  const valAccion = SpreadsheetApp.newDataValidation()
+    .requireValueInList(ACCIONES_REF, true).setAllowInvalid(false).build();
+  hoja.getRange(2, COL_REF.ACCION, hoja.getMaxRows() - 1, 1).setDataValidation(valAccion);
+
+  // Validación Género (columna 7)
+  const valGen = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Hombre', 'Mujer', 'Otro'], true).setAllowInvalid(true).build();
+  hoja.getRange(2, COL_REF.GENERO, hoja.getMaxRows() - 1, 1).setDataValidation(valGen);
+
+  ui.alert(
+    '✅ Hoja "' + HOJA_REFERENCIAS + '" configurada.
+
+' +
+    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción
+
+' +
+    'Acción disponible: "Enviar a: Lista de Espera"
+
+' +
+    'Usa Menú → 🌐 KoboToolbox → 🔄 Sync → Referencias para importar datos.'
+  );
+}
+
+// ── 9.2  Configurar hoja "Lista de Espera" ───────────────────────────────────
+function setupHojaListaEspera() {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const ui   = SpreadsheetApp.getUi();
+  const ENCABEZADOS = [
+    'Creamos ID', 'Nombre Completo', 'Nombre Preferido', 'DPI / CUI',
+    'Fecha de Nacimiento', 'Edad', 'Género', 'Teléfono',
+    'Zona / Colonia', 'Último Nivel Cursado', 'Acción'
+  ];
+  const ACCIONES_LISTA = ['-- Seleccionar --', ...GRADOS.map(function(g) { return 'Enviar a: ' + g; })];
+
+  let hoja = ss.getSheetByName(HOJA_LISTA_ESPERA);
+  if (!hoja) {
+    hoja = ss.insertSheet(HOJA_LISTA_ESPERA);
+  } else {
+    hoja.clearContents();
+    hoja.clearFormats();
+    try { hoja.clearDataValidations(); } catch(e) {}
+  }
+
+  // Fila 1 — encabezados
+  const rHead = hoja.getRange(1, 1, 1, ENCABEZADOS.length);
+  rHead.setValues([ENCABEZADOS])
+    .setBackground(COLOR_HEADER_LISTA).setFontColor(COLOR_FONT_HEADER)
+    .setFontWeight('bold').setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  hoja.setFrozenRows(1);
+  hoja.setRowHeight(1, 32);
+
+  // Anchos de columna
+  [180, 220, 150, 130, 130, 60, 90, 110, 150, 200, 200].forEach(function(w, i) {
+    hoja.setColumnWidth(i + 1, w);
+  });
+
+  // Validación Acción (columna 11) — enviar a cualquier grado
+  const valAccion = SpreadsheetApp.newDataValidation()
+    .requireValueInList(ACCIONES_LISTA, true).setAllowInvalid(false).build();
+  hoja.getRange(2, COL_LISTA.ACCION, hoja.getMaxRows() - 1, 1).setDataValidation(valAccion);
+
+  // Validación Género (columna 7)
+  const valGen = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Hombre', 'Mujer', 'Otro'], true).setAllowInvalid(true).build();
+  hoja.getRange(2, COL_LISTA.GENERO, hoja.getMaxRows() - 1, 1).setDataValidation(valGen);
+
+  ui.alert(
+    '✅ Hoja "' + HOJA_LISTA_ESPERA + '" configurada.
+
+' +
+    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción
+
+' +
+    'Acción: selecciona "Enviar a: [Grado]" para transferir a la hoja de grado.'
+  );
+}
+
+// ── 9.3  Transferir Referencias → Lista de Espera ────────────────────────────
+function _transReferenciasAListaEspera(fila) {
+  const ss      = SpreadsheetApp.getActiveSpreadsheet();
+  const hojaRef = ss.getSheetByName(HOJA_REFERENCIAS);
+  const datos   = hojaRef.getRange(fila, 1, 1, 11).getValues()[0];
+
+  const nombre = datos[COL_REF.NOMBRE - 1];
+  if (!nombre) {
+    SpreadsheetApp.getUi().alert('⚠️ La fila no tiene nombre. No se realizó la transferencia.');
+    hojaRef.getRange(fila, COL_REF.ACCION).setValue('-- Seleccionar --');
+    return;
+  }
+
+  let hojaLista = ss.getSheetByName(HOJA_LISTA_ESPERA);
+  if (!hojaLista) {
+    setupHojaListaEspera();
+    hojaLista = ss.getSheetByName(HOJA_LISTA_ESPERA);
+  }
+
+  const filaDestino = Math.max(hojaLista.getLastRow() + 1, 2);
+  // Copiar las 10 columnas de datos (sin la Acción) y dejar Acción vacía
+  hojaLista.getRange(filaDestino, 1, 1, 10).setValues([datos.slice(0, 10)]);
+  hojaLista.getRange(filaDestino, COL_LISTA.ACCION).setValue('-- Seleccionar --');
+  // Replicar la validación de Acción en la fila recién creada
+  const ACCIONES_LISTA = ['-- Seleccionar --', ...GRADOS.map(function(g) { return 'Enviar a: ' + g; })];
+  const valAccion = SpreadsheetApp.newDataValidation()
+    .requireValueInList(ACCIONES_LISTA, true).setAllowInvalid(false).build();
+  hojaLista.getRange(filaDestino, COL_LISTA.ACCION).setDataValidation(valAccion);
+
+  hojaLista.setRowHeight(filaDestino, 24);
+
+  // Marcar origen como enviado
+  hojaRef.getRange(fila, 1, 1, 11).setBackground('#EDE7F6');
+  hojaRef.getRange(fila, COL_REF.ACCION)
+    .setValue('✅ Lista de Espera').setDataValidation(null);
+
+  ss.toast('"' + nombre + '" → Lista de Espera', '✅ Referencia enviada', 5);
+}
+
+// ── 9.4  Transferir Lista de Espera → Hoja de Grado ─────────────────────────
+function _transListaEsperaAGrado(fila, grado) {
+  const ss        = SpreadsheetApp.getActiveSpreadsheet();
+  const hojaLista = ss.getSheetByName(HOJA_LISTA_ESPERA);
+  const datos     = hojaLista.getRange(fila, 1, 1, 10).getValues()[0];
+
+  const creamosId  = datos[COL_LISTA.CREAMOS_ID  - 1];
+  const nombre     = datos[COL_LISTA.NOMBRE      - 1];
+  const dpi        = datos[COL_LISTA.DPI         - 1];
+  const edad       = datos[COL_LISTA.EDAD        - 1];
+  const telefono   = datos[COL_LISTA.TELEFONO    - 1];
+
+  if (!nombre) {
+    SpreadsheetApp.getUi().alert('⚠️ La fila no tiene nombre. No se realizó la transferencia.');
+    hojaLista.getRange(fila, COL_LISTA.ACCION).setValue('-- Seleccionar --');
+    return;
+  }
+
+  const nombreHoja = _nombreHoja(grado);
+  let   hojaGrado  = ss.getSheetByName(nombreHoja);
+  if (!hojaGrado) hojaGrado = crearHojaGrado(grado, true);
+
+  const filaDestino = Math.max(hojaGrado.getLastRow() + 1, 3);
+  const id          = _siguienteId(hojaGrado, grado);
+
+  hojaGrado.getRange(filaDestino, 1, 1, 9).setValues([[
+    id, creamosId || '', nombre, dpi,
+    telefono || '', edad, grado,
+    'Presencial',
+    'Inscritx'
+  ]]);
+
+  hojaGrado.getRange(filaDestino, 1, 1, 9)
+    .setVerticalAlignment('middle').setHorizontalAlignment('center');
+  hojaGrado.getRange(filaDestino, COL_GRADO.NOMBRE).setHorizontalAlignment('left');
+  hojaGrado.getRange(filaDestino, COL_GRADO.DPI).setHorizontalAlignment('left');
+  hojaGrado.setRowHeight(filaDestino, 26);
+
+  // Marcar origen como enviado
+  hojaLista.getRange(fila, 1, 1, 11).setBackground('#E8F5E9');
+  hojaLista.getRange(fila, COL_LISTA.ACCION)
+    .setValue('✅ ' + grado).setDataValidation(null);
+
+  ss.toast('"' + nombre + '" → "' + nombreHoja + '" · ID: ' + id, '✅ Transferido a grado', 5);
+}
+
+// ── 9.5  Sync KoboToolbox → "Referencias a Educación" ────────────────────────
+// La URL se guarda en Script Properties con clave "KOBO_URL_REFERENCIAS".
+// Para configurarla: Menú → 🌐 KoboToolbox → 🔑 Configurar token de API
+// (o usa Apps Script → Propiedades del proyecto → KOBO_URL_REFERENCIAS)
+function koboSincronizarReferencias() {
+  const ui    = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  const url   = props.getProperty('KOBO_URL_REFERENCIAS');
+
+  if (!url) {
+    ui.alert(
+      '⚠️ URL no configurada
+
+' +
+      'Debes guardar la URL del KoboToolbox de Referencias en las propiedades del script:
+
+' +
+      '1. Apps Script → icono ⚙️ Propiedades del proyecto
+' +
+      '2. Propiedades de script → Agregar propiedad
+' +
+      '   Nombre:  KOBO_URL_REFERENCIAS
+' +
+      '   Valor:   [pega aquí la URL del CSV de KoboToolbox]
+' +
+      '3. Guarda y ejecuta este sync de nuevo.'
+    );
+    return;
+  }
+
+  _koboSincronizarReferenciasInterno(url);
+}
+
+function _koboSincronizarReferenciasInterno(url) {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    const csv  = _koboFetchCsv(url);
+    const rows = _koboParseCsv(csv);
+    if (rows.length < 2) { ui.alert('El CSV de Referencias no tiene datos o está vacío.'); return; }
+
+    const headers = rows[0];
+
+    function _norm(s) {
+      return String(s || '').trim().toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    const headersNorm = {};
+    headers.forEach(function(h, i) {
+      const k = _norm(h);
+      if (!headersNorm.hasOwnProperty(k)) headersNorm[k] = i;
+    });
+    function _col(n) {
+      const k = _norm(n);
+      return headersNorm.hasOwnProperty(k) ? headersNorm[k] : -1;
+    }
+    function _colFuzzy(t) {
+      const nt = _norm(t);
+      const k  = Object.keys(headersNorm).find(function(h) { return h.indexOf(nt) >= 0; });
+      return k !== undefined ? headersNorm[k] : -1;
+    }
+
+    // Mapeo de columnas (reutiliza lógica del sync principal)
+    const idx = {};
+    idx.CREAMOS_ID  = _col('Creamos ID');
+    if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _col('Inicio/Creamos ID');
+    if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _colFuzzy('creamos');
+
+    idx.NOMBRE      = _col('Nombre Completo');
+    if (idx.NOMBRE      < 0) idx.NOMBRE      = _col('Nombre(s)');
+    if (idx.NOMBRE      < 0) idx.NOMBRE      = _col('Nombre');
+    if (idx.NOMBRE      < 0) idx.NOMBRE      = _colFuzzy('nombre');
+
+    idx.APELLIDO    = _col('Apellido(s)');
+    if (idx.APELLIDO    < 0) idx.APELLIDO    = _col('Apellido');
+    if (idx.APELLIDO    < 0) idx.APELLIDO    = _colFuzzy('apellido');
+
+    idx.NOMBRE_PREF = _col('Nombre Preferido');
+    if (idx.NOMBRE_PREF < 0) idx.NOMBRE_PREF = _colFuzzy('preferido');
+
+    idx.DPI         = _col('DPI / CUI');
+    if (idx.DPI         < 0) idx.DPI         = _col('DPI');
+    if (idx.DPI         < 0) idx.DPI         = _col('CUI');
+    if (idx.DPI         < 0) idx.DPI         = _colFuzzy('dpi');
+    if (idx.DPI         < 0) idx.DPI         = _colFuzzy('cui');
+
+    idx.FECHA_NAC   = _col('Fecha de Nacimiento');
+    if (idx.FECHA_NAC   < 0) idx.FECHA_NAC   = _colFuzzy('nacimiento');
+
+    idx.GENERO      = _col('Género');
+    if (idx.GENERO      < 0) idx.GENERO      = _col('Genero');
+
+    idx.TELEFONO    = _col('Teléfono');
+    if (idx.TELEFONO    < 0) idx.TELEFONO    = _col('Número de Teléfono');
+    if (idx.TELEFONO    < 0) idx.TELEFONO    = _colFuzzy('telefono');
+
+    idx.ZONA        = _col('Zona / Colonia');
+    if (idx.ZONA        < 0) idx.ZONA        = _col('Zona');
+    if (idx.ZONA        < 0) idx.ZONA        = _colFuzzy('zona');
+
+    idx.ULTIMO_ANIO = _col('Último Nivel Cursado');
+    if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('ultimo nivel');
+    if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('nivel de estudios');
+
+    // DPIs ya en la hoja
+    const ss            = SpreadsheetApp.getActiveSpreadsheet();
+    let   hojaRef       = ss.getSheetByName(HOJA_REFERENCIAS);
+    if (!hojaRef) { setupHojaReferencias(); hojaRef = ss.getSheetByName(HOJA_REFERENCIAS); }
+
+    const ultimaFila    = hojaRef.getLastRow();
+    const dpisExistentes = new Set();
+    if (ultimaFila >= 2) {
+      hojaRef.getRange(2, COL_REF.DPI, ultimaFila - 1, 1)
+        .getValues().flat()
+        .forEach(function(d) { if (d !== '') dpisExistentes.add(String(d).trim()); });
+    }
+
+    let importados = 0, omitidos = 0;
+    const filasNuevas = [];
+
+    rows.slice(1).forEach(function(row) {
+      const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
+      if (dpi && dpisExistentes.has(dpi)) { omitidos++; return; }
+
+      // Nombre completo
+      let nombre = idx.NOMBRE >= 0 ? String(row[idx.NOMBRE] || '').trim() : '';
+      if (!nombre && idx.APELLIDO >= 0) {
+        const ap = String(row[idx.APELLIDO] || '').trim();
+        if (ap) nombre = nombre + (nombre ? ' ' : '') + ap;
+      }
+      if (!nombre) { omitidos++; return; }  // sin nombre → omitir
+
+      const creamosId  = idx.CREAMOS_ID  >= 0 ? String(row[idx.CREAMOS_ID]  || '').trim() : '';
+      const nombrePref = idx.NOMBRE_PREF >= 0 ? String(row[idx.NOMBRE_PREF] || '').trim() : '';
+      const fechaNac   = idx.FECHA_NAC   >= 0 ? String(row[idx.FECHA_NAC]   || '').trim() : '';
+      const genero     = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
+      const telefono   = idx.TELEFONO    >= 0 ? String(row[idx.TELEFONO]    || '').trim() : '';
+      const zona       = idx.ZONA        >= 0 ? String(row[idx.ZONA]        || '').trim() : '';
+      const ultimoAnio = idx.ULTIMO_ANIO >= 0 ? String(row[idx.ULTIMO_ANIO] || '').trim() : '';
+
+      // Calcular edad desde fecha de nacimiento
+      let edad = '';
+      if (fechaNac) {
+        const parts = fechaNac.split(/[-\/]/);
+        if (parts.length === 3) {
+          const anioNac = parseInt(parts[0].length === 4 ? parts[0] : parts[2]);
+          if (!isNaN(anioNac)) edad = new Date().getFullYear() - anioNac;
+        }
+      }
+
+      if (dpi) dpisExistentes.add(dpi);
+      filasNuevas.push([
+        creamosId, nombre, nombrePref, dpi,
+        fechaNac, edad, genero, telefono, zona, ultimoAnio,
+        '-- Seleccionar --'
+      ]);
+      importados++;
+    });
+
+    if (filasNuevas.length > 0) {
+      const filaInicio = Math.max(hojaRef.getLastRow() + 1, 2);
+      hojaRef.getRange(filaInicio, 1, filasNuevas.length, 11).setValues(filasNuevas);
+      // Aplicar validación de Acción en las filas nuevas
+      const valAccion = SpreadsheetApp.newDataValidation()
+        .requireValueInList(['-- Seleccionar --', 'Enviar a: Lista de Espera'], true)
+        .setAllowInvalid(false).build();
+      hojaRef.getRange(filaInicio, COL_REF.ACCION, filasNuevas.length, 1).setDataValidation(valAccion);
+    }
+
+    const msg = '✅ Sync de Referencias completado
+
+' +
+      '• Importados:  ' + importados + '
+' +
+      '• Omitidos (ya existían o sin nombre): ' + omitidos + '
+
+' +
+      'Total en hoja: ' + (Math.max(hojaRef.getLastRow() - 1, 0));
+    if (ui) ui.alert(msg);
+    ss.toast(importados + ' registros importados.', '✅ Referencias sync', 5);
+
+  } catch(e) {
+    if (ui) ui.alert('❌ Error en sync de Referencias:
+' + e.message);
+  }
+}
 
 // ── 8.1  Gestión del token ───────────────────────────────────────────────────
 
