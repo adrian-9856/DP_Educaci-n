@@ -1586,20 +1586,12 @@ function koboSincronizarReferencias() {
 
   if (!url) {
     ui.alert(
-      '⚠️ URL no configurada
-
-' +
-      'Debes guardar la URL del KoboToolbox de Referencias en las propiedades del script:
-
-' +
-      '1. Apps Script → icono ⚙️ Propiedades del proyecto
-' +
-      '2. Propiedades de script → Agregar propiedad
-' +
-      '   Nombre:  KOBO_URL_REFERENCIAS
-' +
-      '   Valor:   [pega aquí la URL del CSV de KoboToolbox]
-' +
+      '⚠️ URL no configurada\n\n' +
+      'Debes guardar la URL del KoboToolbox de Referencias en las propiedades del script:\n\n' +
+      '1. Apps Script → icono ⚙️ Propiedades del proyecto\n' +
+      '2. Propiedades de script → Agregar propiedad\n' +
+      '   Nombre:  KOBO_URL_REFERENCIAS\n' +
+      '   Valor:   [pega aquí la URL del CSV de KoboToolbox]\n' +
       '3. Guarda y ejecuta este sync de nuevo.'
     );
     return;
@@ -1744,21 +1736,15 @@ function _koboSincronizarReferenciasInterno(url) {
       hojaRef.getRange(filaInicio, COL_REF.ACCION, filasNuevas.length, 1).setDataValidation(valAccion);
     }
 
-    const msg = '✅ Sync de Referencias completado
-
-' +
-      '• Importados:  ' + importados + '
-' +
-      '• Omitidos (ya existían o sin nombre): ' + omitidos + '
-
-' +
+    const msg = '✅ Sync de Referencias completado\n\n' +
+      '• Importados:  ' + importados + '\n' +
+      '• Omitidos (ya existían o sin nombre): ' + omitidos + '\n\n' +
       'Total en hoja: ' + (Math.max(hojaRef.getLastRow() - 1, 0));
     if (ui) ui.alert(msg);
     ss.toast(importados + ' registros importados.', '✅ Referencias sync', 5);
 
   } catch(e) {
-    if (ui) ui.alert('❌ Error en sync de Referencias:
-' + e.message);
+    if (ui) ui.alert('❌ Error en sync de Referencias:\n' + e.message);
   }
 }
 
