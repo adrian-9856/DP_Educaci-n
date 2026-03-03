@@ -1364,7 +1364,7 @@ function setupHojaReferencias() {
     'Creamos ID', 'Nombre Completo', 'Nombre Preferido', 'DPI / CUI',
     'Fecha de Nacimiento', 'Edad', 'Género', 'Teléfono',
     'Zona / Colonia', 'Último Nivel Cursado',
-    'Fecha de Referencia', 'Responsable de Referencia', 'Estado del Estudio',
+    'Fecha de Referencia', 'Responsable de Referencia', 'Grado de Interés',
     'Acción'
   ];
   const ACCIONES_REF = ['-- Seleccionar --', 'Enviar a: Lista de Espera'];
@@ -1404,7 +1404,7 @@ function setupHojaReferencias() {
 
   ui.alert(
     '✅ Hoja "' + HOJA_REFERENCIAS + '" configurada.\n\n' +
-    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Fecha de Referencia · Responsable · Estado del Estudio · Acción\n\n' +
+    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Fecha de Referencia · Responsable · Grado de Interés · Acción\n\n' +
     '⚠️ El Sync importa SOLO registros referidos a Educación.\n\n' +
     'Acción disponible: "Enviar a: Lista de Espera"\n\n' +
     'Usa Menú → 🌐 KoboToolbox → 🔄 Sync → Referencias para importar datos.'
@@ -1695,8 +1695,10 @@ function _koboSincronizarReferenciasInterno(url) {
     idx.ZONA_ESPEC  = _colFuzzy('especifique zona');
     if (idx.ZONA_ESPEC  < 0) idx.ZONA_ESPEC  = _colFuzzy('especifique');
 
-    idx.ULTIMO_ANIO = _col('Último Nivel Cursado');
-    if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('ultimo nivel');
+    // "Último Nivel Cursado" está bajo DETALLES EDUCACIÓN; buscar específico
+    // para no confundir con "Último Nivel Académico Aprobado" de Laboral
+    idx.ULTIMO_ANIO = _colFuzzy('ultimo nivel cursado');
+    if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _col('Último Nivel Cursado');
     if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('nivel de estudios');
 
     // Columnas nuevas: filtro programa + datos extra de Educación
@@ -1707,13 +1709,13 @@ function _koboSincronizarReferenciasInterno(url) {
     idx.FECHA_REF      = _col('Fecha de Referencia');
     if (idx.FECHA_REF  < 0) idx.FECHA_REF    = _colFuzzy('fecha de referencia');
 
-    idx.RESPONSABLE    = _colFuzzy('nombre del responsable de la referencia');
-    if (idx.RESPONSABLE< 0) idx.RESPONSABLE  = _colFuzzy('responsable de la referencia');
+    idx.RESPONSABLE    = _colFuzzy('nombre del responsable');
     if (idx.RESPONSABLE< 0) idx.RESPONSABLE  = _colFuzzy('responsable');
 
-    idx.ESTADO_ESTUDIO = _col('Estado del estudio');
-    if (idx.ESTADO_ESTUDIO < 0) idx.ESTADO_ESTUDIO = _colFuzzy('estado del estudio');
-    if (idx.ESTADO_ESTUDIO < 0) idx.ESTADO_ESTUDIO = _colFuzzy('estado estudio');
+    // Grado de Interés: reemplaza "Estado del estudio" (que no existe en el form)
+    idx.GRADO_INTERES  = _colFuzzy('en que grado esta interesado');
+    if (idx.GRADO_INTERES < 0) idx.GRADO_INTERES = _colFuzzy('grado esta interesado');
+    if (idx.GRADO_INTERES < 0) idx.GRADO_INTERES = _colFuzzy('grado interesado');
 
     // DPIs ya en la hoja
     const ss            = SpreadsheetApp.getActiveSpreadsheet();
@@ -1761,9 +1763,9 @@ function _koboSincronizarReferenciasInterno(url) {
         if (zonaesp && zonaesp !== zona) zona = zona ? zona + ' - ' + zonaesp : zonaesp;
       }
       const ultimoAnio      = idx.ULTIMO_ANIO     >= 0 ? String(row[idx.ULTIMO_ANIO]     || '').trim() : '';
-      const fechaRef        = idx.FECHA_REF       >= 0 ? String(row[idx.FECHA_REF]       || '').trim() : '';
-      const responsable     = idx.RESPONSABLE     >= 0 ? String(row[idx.RESPONSABLE]     || '').trim() : '';
-      const estadoEstudio   = idx.ESTADO_ESTUDIO  >= 0 ? String(row[idx.ESTADO_ESTUDIO]  || '').trim() : '';
+      const fechaRef        = idx.FECHA_REF      >= 0 ? String(row[idx.FECHA_REF]      || '').trim() : '';
+      const responsable     = idx.RESPONSABLE    >= 0 ? String(row[idx.RESPONSABLE]    || '').trim() : '';
+      const gradoInteres    = idx.GRADO_INTERES  >= 0 ? String(row[idx.GRADO_INTERES]  || '').trim() : '';
 
       // Calcular edad desde fecha de nacimiento
       let edad = '';
@@ -1779,7 +1781,7 @@ function _koboSincronizarReferenciasInterno(url) {
       filasNuevas.push([
         creamosId, nombre, nombrePref, dpi,
         fechaNac, edad, genero, telefono, zona, ultimoAnio,
-        fechaRef, responsable, estadoEstudio,
+        fechaRef, responsable, gradoInteres,
         '-- Seleccionar --'
       ]);
       importados++;
