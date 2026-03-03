@@ -137,6 +137,9 @@ const KOBO_URL_ACTUAL = 'https://kf.kobotoolbox.org/api/v2/assets/auvEELWQEgiwF5
 // URL histórica — formulario de años anteriores (importación única / manual)
 const KOBO_URL_HISTORICO = 'https://kf.kobotoolbox.org/api/v2/assets/akz5K2bGfvvisQaE7VaHev/export-settings/esuV4RKqQhYUUaUizfWBP8S/data.csv';
 
+// URL formulario de Referencias a Educación
+const KOBO_URL_REFERENCIAS = 'https://kf.kobotoolbox.org/api/v2/assets/afuD8C8AzoLfd4o5ksTWUw/export-settings/es52swrnjWcz8NnhY5Wyng3/data.csv';
+
 // Colores encabezado Kobo
 const COLOR_HEADER_KOBO = '#6A1B9A';
 
@@ -1601,28 +1604,8 @@ function _transListaEsperaAGrado(fila, grado) {
 }
 
 // ── 9.5  Sync KoboToolbox → "Referencias a Educación" ────────────────────────
-// La URL se guarda en Script Properties con clave "KOBO_URL_REFERENCIAS".
-// Para configurarla: Menú → 🌐 KoboToolbox → 🔑 Configurar token de API
-// (o usa Apps Script → Propiedades del proyecto → KOBO_URL_REFERENCIAS)
 function koboSincronizarReferencias() {
-  const ui    = SpreadsheetApp.getUi();
-  const props = PropertiesService.getScriptProperties();
-  const url   = props.getProperty('KOBO_URL_REFERENCIAS');
-
-  if (!url) {
-    ui.alert(
-      '⚠️ URL no configurada\n\n' +
-      'Debes guardar la URL del KoboToolbox de Referencias en las propiedades del script:\n\n' +
-      '1. Apps Script → icono ⚙️ Propiedades del proyecto\n' +
-      '2. Propiedades de script → Agregar propiedad\n' +
-      '   Nombre:  KOBO_URL_REFERENCIAS\n' +
-      '   Valor:   [pega aquí la URL del CSV de KoboToolbox]\n' +
-      '3. Guarda y ejecuta este sync de nuevo.'
-    );
-    return;
-  }
-
-  _koboSincronizarReferenciasInterno(url);
+  _koboSincronizarReferenciasInterno(KOBO_URL_REFERENCIAS);
 }
 
 function _koboSincronizarReferenciasInterno(url) {
