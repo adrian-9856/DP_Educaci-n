@@ -1379,15 +1379,9 @@ function setupHojaReferencias() {
   hoja.getRange(2, COL_REF.GENERO, hoja.getMaxRows() - 1, 1).setDataValidation(valGen);
 
   ui.alert(
-    '✅ Hoja "' + HOJA_REFERENCIAS + '" configurada.
-
-' +
-    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción
-
-' +
-    'Acción disponible: "Enviar a: Lista de Espera"
-
-' +
+    '✅ Hoja "' + HOJA_REFERENCIAS + '" configurada.\n\n' +
+    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción\n\n' +
+    'Acción disponible: "Enviar a: Lista de Espera"\n\n' +
     'Usa Menú → 🌐 KoboToolbox → 🔄 Sync → Referencias para importar datos.'
   );
 }
@@ -1437,12 +1431,8 @@ function setupHojaListaEspera() {
   hoja.getRange(2, COL_LISTA.GENERO, hoja.getMaxRows() - 1, 1).setDataValidation(valGen);
 
   ui.alert(
-    '✅ Hoja "' + HOJA_LISTA_ESPERA + '" configurada.
-
-' +
-    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción
-
-' +
+    '✅ Hoja "' + HOJA_LISTA_ESPERA + '" configurada.\n\n' +
+    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción\n\n' +
     'Acción: selecciona "Enviar a: [Grado]" para transferir a la hoja de grado.'
   );
 }
