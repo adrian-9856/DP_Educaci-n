@@ -2360,9 +2360,11 @@ function _koboSincronizar(url, modoHistorico) {
         if (nombresExistentes.has(claveNom)) { omitidosDupes++; return; }
       }
       const edadDirecta = idx.EDAD_DIRECTA >= 0 ? String(row[idx.EDAD_DIRECTA] || '').trim() : '';
-      // Solo usar edadDirecta si es un número válido (no una fecha u otro valor)
-      const edadEsNumero = edadDirecta !== '' && /^\d{1,3}$/.test(edadDirecta) && parseInt(edadDirecta) < 120;
-      const edad         = edadEsNumero ? parseInt(edadDirecta) : _calcularEdad(fechaNac);
+      // Acepta entero "25" o decimal "25.0" pero NO fechas ("07/04/2007") ni texto
+      const edadNum      = parseFloat(edadDirecta);
+      const edadEsNumero = edadDirecta !== '' && !isNaN(edadNum) && edadNum > 0 && edadNum < 120
+                           && !/[\/\-]/.test(edadDirecta);
+      const edad         = edadEsNumero ? Math.floor(edadNum) : _calcularEdad(fechaNac);
 
       // ── 6. Género → normalizado; "¿Cómo te autodescribes?" como complemento ──
       const generoRaw     = idx.GENERO      >= 0 ? row[idx.GENERO]      : '';
