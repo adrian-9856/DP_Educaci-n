@@ -132,7 +132,7 @@ const COLOR_FONT_HEADER    = '#FFFFFF';
 // ── KoboToolbox ──────────────────────────────────────────────────────────────
 // URL de exportación CSV — datos de educación (requiere token en Script Properties)
 // URL nueva — formulario activo (sync automático cada minuto)
-const KOBO_URL_ACTUAL = 'https://kf.kobotoolbox.org/api/v2/assets/auvEELWQEgiwF54W4pGpV5/export-settings/eseYzEgWw6Tui9y2eppZy3L/data.csv';
+const KOBO_URL_ACTUAL = 'https://kf.kobotoolbox.org/api/v2/assets/auvEELWQEgiwF54W4pGpV5/export-settings/esd2gxqN87HPuQDypxFqUNi/data.csv';
 
 // URL histórica — formulario de años anteriores (importación única / manual)
 const KOBO_URL_HISTORICO = 'https://kf.kobotoolbox.org/api/v2/assets/akz5K2bGfvvisQaE7VaHev/export-settings/esuV4RKqQhYUUaUizfWBP8S/data.csv';
@@ -291,9 +291,10 @@ function onOpen() {
       ui.createMenu('🌐 KoboToolbox')
         .addItem('🔑 Configurar token de API',        'koboConfigurarToken')
         .addSeparator()
-        .addItem('📦 Importar datos HISTÓRICOS',      'koboImportarHistorico')
-        .addItem('🔄 Sync → hoja Interés (actual)',   'koboSincronizarHojaInteres')
-        .addItem('🔄 Sync → Referencias a Educación', 'koboSincronizarReferencias')
+        .addItem('📦 Importar datos HISTÓRICOS',           'koboImportarHistorico')
+        .addItem('🔄 Sync → hoja Interés (actual)',        'koboSincronizarHojaInteres')
+        .addItem('🔄 Sync → Referencias a Educación',      'koboSincronizarReferencias')
+        .addItem('🔄 Sync TODO (Interés + Referencias)',   'koboSincronizarTodo')
         .addSeparator()
         .addItem('🔁 Sync automático (cada minuto)',  'koboInstalarTriggerSync')
         .addItem('⛔ Detener sync automático',          'koboEliminarTriggerSync')
@@ -1608,6 +1609,16 @@ function koboSincronizarReferencias() {
   _koboSincronizarReferenciasInterno(KOBO_URL_REFERENCIAS);
 }
 
+// ── 9.5b  Sync combinado: Interés + Referencias ───────────────────────────────
+function koboSincronizarTodo() {
+  const ui = SpreadsheetApp.getUi();
+  ui.alert('🔄 Sincronizando Hoja de Interés...\n\nEsto puede tomar unos segundos.');
+  _koboSincronizar(KOBO_URL_ACTUAL, false);
+  ui.alert('🔄 Sincronizando Referencias a Educación...\n\nEsto puede tomar unos segundos.');
+  _koboSincronizarReferenciasInterno(KOBO_URL_REFERENCIAS);
+  ui.alert('✅ Sync completo\n\nSe sincronizaron:\n• Hoja de Interés\n• Referencias a Educación');
+}
+
 function _koboSincronizarReferenciasInterno(url) {
   const ui = SpreadsheetApp.getUi();
   try {
@@ -2069,13 +2080,18 @@ function _koboSincronizar(url, modoHistorico) {
 
     // ── Fallbacks para el filtro de Educación ────────────────────────────
     // PROGRAMAS_EDUC: columna booleana del multi-select (formulario nuevo)
+    // El formulario actual exporta con prefijo "Inicio/"
+    if (idx.PROGRAMAS_EDUC < 0) idx.PROGRAMAS_EDUC =
+      _col('Inicio/¿Qué programas te interesan?/Educación Extraescolar/Alternativa');
     if (idx.PROGRAMAS_EDUC < 0) idx.PROGRAMAS_EDUC =
       _col('¿Qué programas te interesan?/Educación Extraescolar/Alternativa');
+    if (idx.PROGRAMAS_EDUC < 0) idx.PROGRAMAS_EDUC =
+      _colFuzzy('programas te interesan');   // último recurso
 
     // INSCRIPCION: campo Sí/No dentro del grupo Educación (ambos formularios)
     if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _col('Educación Extraescolar/Alternativa/¿Deseas inscribirte en el programa de Educación?');
     if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _col('¿Deseas inscribirte en el programa de Educación?');
-    if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribirte en el programa');
+    if (idx.INSCRIPCION < 0) idx.INSCRIPCION = _colFuzzy('inscribirte en el programa de educacion');
 
     // ── Índices de papelería individual ───────────────────────────────────
     const idxPap = {};
@@ -2091,9 +2107,10 @@ function _koboSincronizar(url, modoHistorico) {
 
     // ── Diagnóstico: mostrar columnas no encontradas ───────────────────────
     const sinFiltro = idx.PROGRAMAS_EDUC < 0 && idx.INSCRIPCION < 0 && idx.GRADO_KOBO < 0;
+    // DPI es opcional en el formulario actual (usa UUID/CreamosID para dedup)
     const camposImportantes = modoHistorico
       ? ['NOMBRE', 'DPI']
-      : sinFiltro ? ['NOMBRE', 'DPI', 'PROGRAMAS_EDUC'] : ['NOMBRE', 'DPI'];
+      : sinFiltro ? ['NOMBRE', 'PROGRAMAS_EDUC'] : ['NOMBRE'];
     const faltantes = camposImportantes.filter(function(k) { return idx[k] < 0; });
     if (faltantes.length > 0) {
       // Mostrar las primeras 10 columnas del CSV para diagnóstico
@@ -2120,16 +2137,18 @@ function _koboSincronizar(url, modoHistorico) {
       return;
     }
 
-    // DPIs y UUIDs ya existentes (deduplicación)
-    const ultimaFilaI    = hojaInteres.getLastRow();
-    const dpisExistentes = new Set();
-    const uuidsExistentes = new Set();
+    // DPIs, CreamosIDs y UUIDs ya existentes (deduplicación)
+    const ultimaFilaI      = hojaInteres.getLastRow();
+    const dpisExistentes   = new Set();
+    const creamosExistentes = new Set();
     if (ultimaFilaI >= 2) {
-      hojaInteres.getRange(2, COL_INTERES.DPI, ultimaFilaI - 1, 1)
-        .getValues().flat()
-        .forEach(function(d) { if (d !== '') dpisExistentes.add(String(d).trim()); });
-      // UUID guardado en col COMENTARIO no aplica; leemos col 1 (Creamos ID) para
-      // compatibilidad. El UUID real se usa solo para deduplicar dentro del mismo sync.
+      const filasDatos = hojaInteres.getRange(2, 1, ultimaFilaI - 1, Math.max(COL_INTERES.DPI, COL_INTERES.CREAMOS_ID)).getValues();
+      filasDatos.forEach(function(r) {
+        const cid = String(r[COL_INTERES.CREAMOS_ID - 1] || '').trim();
+        const dpi = String(r[COL_INTERES.DPI - 1]        || '').trim();
+        if (cid) creamosExistentes.add(cid);
+        if (dpi) dpisExistentes.add(dpi);
+      });
     }
     // UUIDs vistos en ESTE sync (evita importar duplicados del mismo CSV)
     const uuidsSyncActual = new Set();
@@ -2158,11 +2177,13 @@ function _koboSincronizar(url, modoHistorico) {
 
       const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
 
-      // ── 2. Deduplicar por UUID (formulario nuevo) y DPI (formulario histórico) ──
+      // ── 2. Deduplicar por UUID / CreamosID / DPI ────────────────────────
       const uuid = idx.UUID >= 0 ? String(row[idx.UUID] || '').trim() : '';
       if (uuid && uuidsSyncActual.has(uuid)) { omitidosDupes++; return; }
       const dpi  = idx.DPI  >= 0 ? String(row[idx.DPI]  || '').trim() : '';
       if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
+      // Para formularios sin DPI, usar Creamos ID como clave de dedup
+      if (creamosId && creamosExistentes.has(creamosId)) { omitidosDupes++; return; }
 
       // ── 3. Construir Nombre Completo (Nombre + Apellido) ────────────────
       const nombre   = String(idx.NOMBRE  >= 0 ? (row[idx.NOMBRE]  || '') : '').trim();
@@ -2240,8 +2261,9 @@ function _koboSincronizar(url, modoHistorico) {
         accion             // 14 Acción
       ]);
 
-      if (dpi)  dpisExistentes.add(dpi);
-      if (uuid) uuidsSyncActual.add(uuid);
+      if (dpi)       dpisExistentes.add(dpi);
+      if (uuid)      uuidsSyncActual.add(uuid);
+      if (creamosId) creamosExistentes.add(creamosId);
     });
 
     if (!filasNuevas.length) {
