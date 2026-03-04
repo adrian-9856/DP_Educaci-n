@@ -2350,27 +2350,25 @@ function _koboSincronizar(url, modoHistorico) {
       const nombrePref = String(idx.NOMBRE_PREF >= 0 ? (row[idx.NOMBRE_PREF] || '') : '').trim();
 
       // ── 5. Fecha de nacimiento / Edad ────────────────────────────────────
-      // Formulario nuevo: "Edad" viene directo como número.
-      // Formulario histórico: se calcula desde "Fecha de nacimiento".
-      const fechaNacRaw = idx.FECHA_NAC >= 0 ? (row[idx.FECHA_NAC] || '') : '';
-      const fechaNac    = String(fechaNacRaw).trim();
+      // El campo "Inicio / Edad" puede traer:
+      //   a) Una fecha de nacimiento: "1992-01-24"  → va a Fecha de Nacimiento y se calcula edad
+      //   b) Un número de edad directa: "25"         → va a Edad; Fecha de Nacimiento del campo histórico
+      const edadDirecta = idx.EDAD_DIRECTA >= 0 ? String(row[idx.EDAD_DIRECTA] || '').trim() : '';
+      const edadEsFecha = /^\d{4}-\d{2}-\d{2}/.test(edadDirecta) ||
+                          /^\d{2}\/\d{2}\/\d{4}$/.test(edadDirecta);
+      const fechaNacHistorico = idx.FECHA_NAC >= 0 ? String(row[idx.FECHA_NAC] || '').trim() : '';
+      // fechaNac: si el campo Edad trae una fecha, esa es la fecha de nacimiento
+      const fechaNac = edadEsFecha ? edadDirecta : fechaNacHistorico;
 
       // ── 5b. Dedup por Nombre+Fecha (fallback cuando no hay DPI ni ID) ────
       if (!dpi && !creamosId && nombreCompleto) {
         const claveNom = _nomNorm(nombreCompleto) + '|' + fechaNac;
         if (nombresExistentes.has(claveNom)) { omitidosDupes++; return; }
       }
-      const edadDirecta = idx.EDAD_DIRECTA >= 0 ? String(row[idx.EDAD_DIRECTA] || '').trim() : '';
-      // Si el campo trae una fecha (YYYY-MM-DD o DD/MM/YYYY), calcular edad desde ahí.
-      // Si trae un número entero o decimal ("25", "25.0"), usarlo directo.
       const edadNum      = parseFloat(edadDirecta);
       const edadEsNumero = edadDirecta !== '' && !isNaN(edadNum) && edadNum > 0 && edadNum < 120
                            && !/[\/\-]/.test(edadDirecta);
-      const edadEsFecha  = /^\d{4}-\d{2}-\d{2}/.test(edadDirecta) ||
-                           /^\d{2}\/\d{2}\/\d{4}$/.test(edadDirecta);
-      const edad = edadEsNumero  ? Math.floor(edadNum)
-                 : edadEsFecha   ? _calcularEdad(edadDirecta)
-                 : _calcularEdad(fechaNac);
+      const edad = edadEsNumero ? Math.floor(edadNum) : _calcularEdad(fechaNac);
 
       // ── 6. Género → normalizado; "¿Cómo te autodescribes?" como complemento ──
       const generoRaw     = idx.GENERO      >= 0 ? row[idx.GENERO]      : '';
