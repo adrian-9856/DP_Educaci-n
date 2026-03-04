@@ -1620,17 +1620,21 @@ function koboSincronizarTodo() {
 }
 
 function _koboSincronizarReferenciasInterno(url) {
-  const ui = SpreadsheetApp.getUi();
+  let ui; try { ui = SpreadsheetApp.getUi(); } catch(e) { ui = null; }
   try {
     const csv  = _koboFetchCsv(url);
     const rows = _koboParseCsv(csv);
-    if (rows.length < 2) { ui.alert('El CSV de Referencias no tiene datos o está vacío.'); return; }
+    if (rows.length < 2) {
+      if (ui) ui.alert('El CSV de Referencias no tiene datos o está vacío.');
+      return;
+    }
 
     const headers = rows[0];
 
+    // ── _norm idéntico al del sync principal (escape explícito) ──────────────
     function _norm(s) {
       return String(s || '').trim().toLowerCase()
-        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .replace(/\//g, ' ').replace(/\s+/g, ' ').trim();
     }
     const headersNorm = {};
@@ -1638,132 +1642,150 @@ function _koboSincronizarReferenciasInterno(url) {
       const k = _norm(h);
       if (!headersNorm.hasOwnProperty(k)) headersNorm[k] = i;
     });
-    function _col(n) {
-      const k = _norm(n);
-      return headersNorm.hasOwnProperty(k) ? headersNorm[k] : -1;
-    }
+    function _col(n)      { const k = _norm(n); return headersNorm.hasOwnProperty(k) ? headersNorm[k] : -1; }
     function _colFuzzy(t) {
       const nt = _norm(t);
       const k  = Object.keys(headersNorm).find(function(h) { return h.indexOf(nt) >= 0; });
       return k !== undefined ? headersNorm[k] : -1;
     }
 
-    // Mapeo de columnas (reutiliza lógica del sync principal)
+    // ── Mapeo de columnas ────────────────────────────────────────────────────
     const idx = {};
-    idx.CREAMOS_ID  = _col('Creamos ID');
-    if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _col('Inicio/Creamos ID');
-    if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _colFuzzy('creamos id');   // evita confundir con "¿Ya es participante de Creamos?"
-    if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _colFuzzy('creamos');
 
-    idx.NOMBRE      = _col('Nombre Completo');
-    if (idx.NOMBRE      < 0) idx.NOMBRE      = _colFuzzy('nombre completo'); // evita tomar "Nombre del responsable" primero
-    if (idx.NOMBRE      < 0) idx.NOMBRE      = _col('Nombre(s)');
-    if (idx.NOMBRE      < 0) idx.NOMBRE      = _col('Nombre');
-    if (idx.NOMBRE      < 0) idx.NOMBRE      = _colFuzzy('nombre');
+    // UUID de Kobo (siempre presente) → dedup principal
+    idx.UUID        = _col('_uuid');
 
-    idx.APELLIDO    = _col('Apellido(s)');
-    if (idx.APELLIDO    < 0) idx.APELLIDO    = _col('Apellido');
-    if (idx.APELLIDO    < 0) idx.APELLIDO    = _colFuzzy('apellido');
+    // Creamos ID
+    idx.CREAMOS_ID  = _colFuzzy('creamos id');     // ".../ Creamos ID"
+    if (idx.CREAMOS_ID < 0) idx.CREAMOS_ID = _colFuzzy('creamos');
 
-    idx.NOMBRE_PREF = _col('Nombre Preferido');
+    // Nombre del participante — buscar "nombre completo" antes que "nombre del responsable"
+    idx.NOMBRE      = _colFuzzy('nombre completo');
+    if (idx.NOMBRE  < 0) idx.NOMBRE = _col('Nombre(s)');
+    if (idx.NOMBRE  < 0) idx.NOMBRE = _colFuzzy('nombre(s)');
+    // Apellidos (por si el nombre viene separado)
+    idx.APELLIDO    = _colFuzzy('apellido');
+
+    idx.NOMBRE_PREF = _colFuzzy('nombre preferido');
     if (idx.NOMBRE_PREF < 0) idx.NOMBRE_PREF = _colFuzzy('preferido');
 
-    idx.DPI         = _col('DPI / CUI');
-    if (idx.DPI         < 0) idx.DPI         = _col('DPI');
-    if (idx.DPI         < 0) idx.DPI         = _col('CUI');
-    if (idx.DPI         < 0) idx.DPI         = _colFuzzy('dpi');
-    if (idx.DPI         < 0) idx.DPI         = _colFuzzy('cui');
+    // DPI / CUI
+    idx.DPI         = _colFuzzy('dpi');
+    if (idx.DPI     < 0) idx.DPI = _colFuzzy('cui');
 
-    idx.FECHA_NAC   = _col('Fecha de Nacimiento');
-    if (idx.FECHA_NAC   < 0) idx.FECHA_NAC   = _colFuzzy('nacimiento');
+    idx.FECHA_NAC   = _colFuzzy('fecha de nacimiento');
+    if (idx.FECHA_NAC < 0) idx.FECHA_NAC = _colFuzzy('nacimiento');
 
-    idx.GENERO      = _col('Género');
-    if (idx.GENERO      < 0) idx.GENERO      = _col('Genero');
+    idx.GENERO      = _colFuzzy('genero');
 
-    idx.TELEFONO    = _col('Teléfono');
-    if (idx.TELEFONO    < 0) idx.TELEFONO    = _col('Número de Teléfono');
-    if (idx.TELEFONO    < 0) idx.TELEFONO    = _colFuzzy('telefono');
+    idx.TELEFONO    = _colFuzzy('telefono');
 
-    idx.ZONA        = _col('Zona / Colonia');
-    if (idx.ZONA        < 0) idx.ZONA        = _col('Zona');
-    if (idx.ZONA        < 0) idx.ZONA        = _colFuzzy('zona');
-
+    // Zona: la columna "Zona / Colonia" del referido — evitar coger columna de otro grupo
+    idx.ZONA        = _colFuzzy('zona colonia');
+    if (idx.ZONA    < 0) idx.ZONA = _colFuzzy('zona');
     idx.ZONA_ESPEC  = _colFuzzy('especifique zona');
-    if (idx.ZONA_ESPEC  < 0) idx.ZONA_ESPEC  = _colFuzzy('especifique');
+    if (idx.ZONA_ESPEC < 0) idx.ZONA_ESPEC = _colFuzzy('especifique');
 
-    // "Último Nivel Cursado" está bajo DETALLES EDUCACIÓN; buscar específico
-    // para no confundir con "Último Nivel Académico Aprobado" de Laboral
+    // Último Nivel Cursado (DETALLES EDUCACIÓN, no el de Laboral)
     idx.ULTIMO_ANIO = _colFuzzy('ultimo nivel cursado');
-    if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _col('Último Nivel Cursado');
-    if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('nivel de estudios');
+    if (idx.ULTIMO_ANIO < 0) idx.ULTIMO_ANIO = _colFuzzy('nivel cursado');
 
-    // Columnas nuevas: filtro programa + datos extra de Educación
-    idx.PROGRAMA       = _colFuzzy('a que programa se refiere');
-    if (idx.PROGRAMA   < 0) idx.PROGRAMA     = _colFuzzy('programa se refiere');
-    if (idx.PROGRAMA   < 0) idx.PROGRAMA     = _colFuzzy('programa');
+    // ¿A qué programa se refiere? (destino de la referencia)
+    // Se busca de más específico a menos para no confundir con "Programa que refiere"
+    idx.PROGRAMA    = _colFuzzy('a que programa se refiere');
+    if (idx.PROGRAMA < 0) idx.PROGRAMA = _colFuzzy('programa se refiere');
 
-    idx.FECHA_REF      = _col('Fecha de Referencia');
-    if (idx.FECHA_REF  < 0) idx.FECHA_REF    = _colFuzzy('fecha de referencia');
+    idx.FECHA_REF   = _colFuzzy('fecha de referencia');
 
-    idx.RESPONSABLE    = _colFuzzy('nombre del responsable');
-    if (idx.RESPONSABLE< 0) idx.RESPONSABLE  = _colFuzzy('responsable');
+    idx.RESPONSABLE = _colFuzzy('nombre del responsable');
+    if (idx.RESPONSABLE < 0) idx.RESPONSABLE = _colFuzzy('responsable');
 
-    // Grado de Interés: reemplaza "Estado del estudio" (que no existe en el form)
-    idx.GRADO_INTERES  = _colFuzzy('en que grado esta interesado');
-    if (idx.GRADO_INTERES < 0) idx.GRADO_INTERES = _colFuzzy('grado esta interesado');
+    // Grado de interés (bajo DETALLES EDUCACIÓN)
+    idx.GRADO_INTERES = _colFuzzy('grado esta interesado');
     if (idx.GRADO_INTERES < 0) idx.GRADO_INTERES = _colFuzzy('grado interesado');
+    if (idx.GRADO_INTERES < 0) idx.GRADO_INTERES = _colFuzzy('que grado');
 
-    // DPIs ya en la hoja
-    const ss            = SpreadsheetApp.getActiveSpreadsheet();
-    let   hojaRef       = ss.getSheetByName(HOJA_REFERENCIAS);
-    if (!hojaRef) { setupHojaReferencias(); hojaRef = ss.getSheetByName(HOJA_REFERENCIAS); }
-
-    const ultimaFila    = hojaRef.getLastRow();
-    const dpisExistentes = new Set();
-    if (ultimaFila >= 2) {
-      hojaRef.getRange(2, COL_REF.DPI, ultimaFila - 1, 1)
-        .getValues().flat()
-        .forEach(function(d) { if (d !== '') dpisExistentes.add(String(d).trim()); });
+    // ── Diagnóstico: avisar si Nombre o UUID no se encontraron ───────────────
+    if (ui && (idx.NOMBRE < 0 || idx.UUID < 0)) {
+      const falt = [];
+      if (idx.NOMBRE < 0) falt.push('Nombre del participante');
+      if (idx.UUID   < 0) falt.push('_uuid (ID de envío)');
+      const muestra = headers.slice(0, 15).map(function(h){ return '  • ' + h; }).join('\n');
+      const r = ui.alert(
+        '⚠️ Campos no encontrados en CSV de Referencias',
+        'No se encontraron:\n' + falt.map(function(f){ return '  • ' + f; }).join('\n') +
+        '\n\nPrimeras columnas del CSV:\n' + muestra +
+        '\n\n¿Continuar de todas formas? (Los campos faltantes quedarán vacíos)',
+        ui.ButtonSet.YES_NO
+      );
+      if (r !== ui.Button.YES) return;
     }
 
-    let importados = 0, omitidos = 0;
+    // ── Identificadores ya en la hoja (dedup) ────────────────────────────────
+    const ss      = SpreadsheetApp.getActiveSpreadsheet();
+    let   hojaRef = ss.getSheetByName(HOJA_REFERENCIAS);
+    if (!hojaRef) { setupHojaReferencias(); hojaRef = ss.getSheetByName(HOJA_REFERENCIAS); }
+
+    const ultimaFila      = hojaRef.getLastRow();
+    const dpisExistentes  = new Set();
+    const uuidsExistentes = new Set();
+    if (ultimaFila >= 2) {
+      const datosHoja = hojaRef.getRange(2, 1, ultimaFila - 1, 14).getValues();
+      datosHoja.forEach(function(r) {
+        const dpi  = String(r[COL_REF.DPI  - 1] || '').trim();
+        // UUID se guarda en col 13 (ESTADO_ESTUDIO) como metadato oculto si hay espacio
+        // Por ahora usamos DPI + nombre para dedup
+        if (dpi) dpisExistentes.add(dpi);
+      });
+    }
+    // UUIDs vistos en este batch (evita dobles dentro del mismo CSV)
+    const uuidsBatch = new Set();
+
+    let importados = 0, omitidosFiltro = 0, omitidosDupes = 0, omitidosSinNombre = 0;
     const filasNuevas = [];
 
     rows.slice(1).forEach(function(row) {
-      // ── Filtrar: solo referidos a Educación ──────────────────────────────
+
+      // ── 1. Filtrar: solo referidos a Educación ────────────────────────────
       if (idx.PROGRAMA >= 0) {
         const prog = _norm(String(row[idx.PROGRAMA] || ''));
-        if (prog && prog.indexOf('educaci') < 0) { omitidos++; return; }
+        // Si el campo está vacío → no filtramos (podría ser educación)
+        if (prog && prog.indexOf('educaci') < 0) { omitidosFiltro++; return; }
       }
 
-      const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
-      if (dpi && dpisExistentes.has(dpi)) { omitidos++; return; }
+      // ── 2. Dedup por UUID (dentro del batch) ─────────────────────────────
+      const uuid = idx.UUID >= 0 ? String(row[idx.UUID] || '').trim() : '';
+      if (uuid && uuidsBatch.has(uuid)) { omitidosDupes++; return; }
 
-      // Nombre completo
+      // ── 3. Dedup por DPI (contra hoja existente) ─────────────────────────
+      const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
+      if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
+
+      // ── 4. Construir nombre ───────────────────────────────────────────────
       let nombre = idx.NOMBRE >= 0 ? String(row[idx.NOMBRE] || '').trim() : '';
       if (!nombre && idx.APELLIDO >= 0) {
         const ap = String(row[idx.APELLIDO] || '').trim();
-        if (ap) nombre = nombre + (nombre ? ' ' : '') + ap;
+        if (ap) nombre = ap;
       }
-      if (!nombre) { omitidos++; return; }  // sin nombre → omitir
+      if (!nombre) { omitidosSinNombre++; return; }
 
       const creamosId  = idx.CREAMOS_ID  >= 0 ? String(row[idx.CREAMOS_ID]  || '').trim() : '';
       const nombrePref = idx.NOMBRE_PREF >= 0 ? String(row[idx.NOMBRE_PREF] || '').trim() : '';
       const fechaNac   = idx.FECHA_NAC   >= 0 ? String(row[idx.FECHA_NAC]   || '').trim() : '';
       const genero     = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
       const telefono   = idx.TELEFONO    >= 0 ? String(row[idx.TELEFONO]    || '').trim() : '';
-      // Combinar Zona / Colonia + Especifique zona
+
       let zona = idx.ZONA >= 0 ? String(row[idx.ZONA] || '').trim() : '';
       if (idx.ZONA_ESPEC >= 0) {
         const zonaesp = String(row[idx.ZONA_ESPEC] || '').trim();
         if (zonaesp && zonaesp !== zona) zona = zona ? zona + ' - ' + zonaesp : zonaesp;
       }
-      const ultimoAnio      = idx.ULTIMO_ANIO     >= 0 ? String(row[idx.ULTIMO_ANIO]     || '').trim() : '';
-      const fechaRef        = idx.FECHA_REF      >= 0 ? String(row[idx.FECHA_REF]      || '').trim() : '';
-      const responsable     = idx.RESPONSABLE    >= 0 ? String(row[idx.RESPONSABLE]    || '').trim() : '';
-      const gradoInteres    = idx.GRADO_INTERES  >= 0 ? String(row[idx.GRADO_INTERES]  || '').trim() : '';
+      const ultimoAnio   = idx.ULTIMO_ANIO   >= 0 ? String(row[idx.ULTIMO_ANIO]   || '').trim() : '';
+      const fechaRef     = idx.FECHA_REF     >= 0 ? String(row[idx.FECHA_REF]     || '').trim() : '';
+      const responsable  = idx.RESPONSABLE   >= 0 ? String(row[idx.RESPONSABLE]   || '').trim() : '';
+      const gradoInteres = idx.GRADO_INTERES >= 0 ? String(row[idx.GRADO_INTERES] || '').trim() : '';
 
-      // Calcular edad desde fecha de nacimiento
+      // Edad desde fecha de nacimiento
       let edad = '';
       if (fechaNac) {
         const parts = fechaNac.split(/[-\/]/);
@@ -1773,7 +1795,9 @@ function _koboSincronizarReferenciasInterno(url) {
         }
       }
 
-      if (dpi) dpisExistentes.add(dpi);
+      if (dpi)  dpisExistentes.add(dpi);
+      if (uuid) uuidsBatch.add(uuid);
+
       filasNuevas.push([
         creamosId, nombre, nombrePref, dpi,
         fechaNac, edad, genero, telefono, zona, ultimoAnio,
@@ -1786,22 +1810,25 @@ function _koboSincronizarReferenciasInterno(url) {
     if (filasNuevas.length > 0) {
       const filaInicio = Math.max(hojaRef.getLastRow() + 1, 2);
       hojaRef.getRange(filaInicio, 1, filasNuevas.length, 14).setValues(filasNuevas);
-      // Aplicar validación de Acción en las filas nuevas
       const valAccion = SpreadsheetApp.newDataValidation()
         .requireValueInList(['-- Seleccionar --', 'Enviar a: Lista de Espera'], true)
         .setAllowInvalid(false).build();
       hojaRef.getRange(filaInicio, COL_REF.ACCION, filasNuevas.length, 1).setDataValidation(valAccion);
     }
 
+    const totalFiltro = omitidosFiltro + omitidosDupes + omitidosSinNombre;
     const msg = '✅ Sync de Referencias completado\n\n' +
-      '• Importados:  ' + importados + '\n' +
-      '• Omitidos (ya existían o sin nombre): ' + omitidos + '\n\n' +
+      '• Importados:       ' + importados + '\n' +
+      '• No son Educación: ' + omitidosFiltro + '\n' +
+      '• Ya existían:      ' + omitidosDupes + '\n' +
+      '• Sin nombre:       ' + omitidosSinNombre + '\n\n' +
       'Total en hoja: ' + (Math.max(hojaRef.getLastRow() - 1, 0));
     if (ui) ui.alert(msg);
-    ss.toast(importados + ' registros importados.', '✅ Referencias sync', 5);
+    SpreadsheetApp.getActiveSpreadsheet()
+      .toast(importados + ' registros importados.', '✅ Referencias sync', 5);
 
   } catch(e) {
-    if (ui) ui.alert('❌ Error en sync de Referencias:\n' + e.message);
+    if (ui) ui.alert('❌ Error en sync de Referencias:\n' + e.message + '\n\nStack: ' + e.stack);
   }
 }
 
@@ -1985,11 +2012,11 @@ function koboSincronizarHojaInteres() {
 // url:           URL del CSV de KoboToolbox
 // modoHistorico: si true, NO filtra por campo INSCRIPCION (todos son de educación)
 function _koboSincronizar(url, modoHistorico) {
-  const ui = SpreadsheetApp.getUi();
+  let ui; try { ui = SpreadsheetApp.getUi(); } catch(e) { ui = null; }
   try {
     const csv  = _koboFetchCsv(url);
     const rows = _koboParseCsv(csv);
-    if (rows.length < 2) { ui.alert('El CSV no tiene datos o está vacío.'); return; }
+    if (rows.length < 2) { if (ui) ui.alert('El CSV no tiene datos o está vacío.'); return; }
 
     const headers = rows[0];
 
@@ -2118,22 +2145,24 @@ function _koboSincronizar(url, modoHistorico) {
       const aviso   = faltantes.map(function(k){
         return '  • ' + k + ' → buscado como "' + KOBO_MAP[k] + '"';
       }).join('\n');
-      const r = ui.alert(
-        '⚠️ Campos no encontrados en el CSV',
-        'No se encontraron:\n' + aviso + '\n\n' +
-        'Primeras columnas del CSV:\n  • ' + muestra + '\n\n' +
-        '¿Continuar de todas formas?\n' +
-        '(Los campos faltantes quedarán vacíos)',
-        ui.ButtonSet.YES_NO
-      );
-      if (r !== ui.Button.YES) return;
+      if (ui) {
+        const r = ui.alert(
+          '⚠️ Campos no encontrados en el CSV',
+          'No se encontraron:\n' + aviso + '\n\n' +
+          'Primeras columnas del CSV:\n  • ' + muestra + '\n\n' +
+          '¿Continuar de todas formas?\n' +
+          '(Los campos faltantes quedarán vacíos)',
+          ui.ButtonSet.YES_NO
+        );
+        if (r !== ui.Button.YES) return;
+      }
     }
 
     // ── Hoja Interés ───────────────────────────────────────────────────────
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const hojaInteres = ss.getSheetByName(HOJA_INTERES);
     if (!hojaInteres) {
-      ui.alert('❌ La hoja "Interés" no existe.\nEjecuta primero "⚙️ Configurar hoja Interés".');
+      if (ui) ui.alert('❌ La hoja "Interés" no existe.\nEjecuta primero "⚙️ Configurar hoja Interés".');
       return;
     }
 
@@ -2267,7 +2296,7 @@ function _koboSincronizar(url, modoHistorico) {
     });
 
     if (!filasNuevas.length) {
-      ui.alert(
+      if (ui) ui.alert(
         '✅ Sin novedades\n\n' +
         'Omitidos (otro programa): ' + omitidosFiltro + '\n' +
         'Ya existían (DPI):        ' + omitidosDupes
@@ -2304,7 +2333,7 @@ function _koboSincronizar(url, modoHistorico) {
     ss.setActiveSheet(hojaInteres);
     const origenLabel = modoHistorico ? '📦 Histórico' : '🔄 Formulario actual';
     ss.toast(filasNuevas.length + ' registros importados desde ' + (modoHistorico ? 'histórico' : 'formulario actual') + '.', '✅ Sync completado', 7);
-    ui.alert(
+    if (ui) ui.alert(
       '✅ ' + (modoHistorico ? 'Importación histórica completada' : 'Sincronización completada') + '\n\n' +
       'Origen: ' + origenLabel + '\n' +
       'Nuevos registros agregados:    ' + filasNuevas.length + '\n' +
@@ -2315,7 +2344,8 @@ function _koboSincronizar(url, modoHistorico) {
     );
 
   } catch (err) {
-    ui.alert('❌ Error en sincronización\n\n' + err.message);
+    if (ui) ui.alert('❌ Error en sincronización\n\n' + err.message);
+    else Logger.log('Error sync Interés: ' + err.message);
   }
 }
 
@@ -2343,28 +2373,42 @@ function _calcularEdad(fechaStr) {
 
 // ── 8.6  Trigger automático de sincronización ─────────────────────────────────
 
+// ── Función llamada por el trigger (silenciosa, sin alertas) ─────────────────
+function koboSyncAutomatico() {
+  try { _koboSincronizar(KOBO_URL_ACTUAL, false); } catch(e) {}
+  try { _koboSincronizarReferenciasInterno(KOBO_URL_REFERENCIAS); } catch(e) {}
+}
+
 function koboInstalarTriggerSync() {
   const ui = SpreadsheetApp.getUi();
   try { _koboGetToken(); } catch (e) { ui.alert('❌ ' + e.message); return; }
 
+  // Eliminar triggers anteriores (Interés solo + combinado)
   ScriptApp.getProjectTriggers()
-    .filter(function(t) { return t.getHandlerFunction() === 'koboSincronizarHojaInteres'; })
+    .filter(function(t) {
+      const fn = t.getHandlerFunction();
+      return fn === 'koboSincronizarHojaInteres' || fn === 'koboSyncAutomatico';
+    })
     .forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
-  ScriptApp.newTrigger('koboSincronizarHojaInteres')
+  ScriptApp.newTrigger('koboSyncAutomatico')
     .timeBased().everyMinutes(1).create();
 
   ui.alert(
-    '✅ Sync automático activado\n\n' +
-    'Cada minuto se agregarán automáticamente los registros nuevos de\n' +
-    'KoboToolbox a la hoja "Interés".\n\n' +
+    '✅ Sync automático activado (cada minuto)\n\n' +
+    'Se sincronizarán automáticamente:\n' +
+    '• Hoja de Interés\n' +
+    '• Referencias a Educación\n\n' +
     'Para detenerlo: menú → 🌐 KoboToolbox → ⛔ Detener sync automático'
   );
 }
 
 function koboEliminarTriggerSync() {
   const eliminados = ScriptApp.getProjectTriggers()
-    .filter(function(t) { return t.getHandlerFunction() === 'koboSincronizarHojaInteres'; });
+    .filter(function(t) {
+      const fn = t.getHandlerFunction();
+      return fn === 'koboSincronizarHojaInteres' || fn === 'koboSyncAutomatico';
+    });
 
   eliminados.forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
