@@ -2177,6 +2177,17 @@ function _koboSincronizar(url, modoHistorico) {
 
     if (idx.GENERO       < 0) idx.GENERO       = _col('Inicio/Género');
     if (idx.GENERO       < 0) idx.GENERO       = _col('Genero');
+    if (idx.GENERO       < 0) idx.GENERO       = _colFuzzy('genero');
+
+    // Edad directa — formulario actual: "Inicio / Edad" (no hay Fecha de Nacimiento)
+    if (idx.EDAD_DIRECTA < 0) idx.EDAD_DIRECTA = _col('Inicio/Edad');
+    if (idx.EDAD_DIRECTA < 0) idx.EDAD_DIRECTA = _colFuzzy('inicio edad');
+    if (idx.EDAD_DIRECTA < 0) idx.EDAD_DIRECTA = _colFuzzy('edad');
+
+    // Autodescripción de género — formulario actual: "Inicio / ¿Cómo te autodescribes?"
+    if (idx.AUTODESCRIBE < 0) idx.AUTODESCRIBE = _col('Inicio/¿Cómo te autodescribes?');
+    if (idx.AUTODESCRIBE < 0) idx.AUTODESCRIBE = _colFuzzy('autodescribes');
+    if (idx.AUTODESCRIBE < 0) idx.AUTODESCRIBE = _colFuzzy('autodescribe');
 
     if (idx.TELEFONO     < 0) idx.TELEFONO     = _col('Inicio/Número de Teléfono');
     if (idx.TELEFONO     < 0) idx.TELEFONO     = _col('Número de teléfono');
@@ -2190,7 +2201,7 @@ function _koboSincronizar(url, modoHistorico) {
     if (idx.ULTIMO_ANIO  < 0) idx.ULTIMO_ANIO  = _col('Inicio/¿Cuál es tu último nivel de estudios terminado?');
     if (idx.ULTIMO_ANIO  < 0) idx.ULTIMO_ANIO  = _colFuzzy('ultimo nivel');
 
-    // DPI / CUI (solo formulario histórico)
+    // DPI / CUI (solo formulario histórico — el formulario actual no tiene DPI)
     if (idx.DPI < 0) idx.DPI = _col('Inicio/Número de DPI');
     if (idx.DPI < 0) idx.DPI = _col('Numero de DPI');
     if (idx.DPI < 0) idx.DPI = _col('DPI');
@@ -2198,7 +2209,7 @@ function _koboSincronizar(url, modoHistorico) {
     if (idx.DPI < 0) idx.DPI = _colFuzzy('dpi');
     if (idx.DPI < 0) idx.DPI = _colFuzzy('cui');
 
-    // Fecha de nacimiento (solo formulario histórico)
+    // Fecha de nacimiento (solo formulario histórico — el formulario actual no la tiene)
     if (idx.FECHA_NAC < 0) idx.FECHA_NAC = _col('Inicio/Fecha de nacimiento');
     if (idx.FECHA_NAC < 0) idx.FECHA_NAC = _colFuzzy('nacimiento');
 
@@ -2304,8 +2315,10 @@ function _koboSincronizar(url, modoHistorico) {
       if (idx.INSCRIPCION >= 0) {
         if (!_esValorPositivo(row[idx.INSCRIPCION])) { omitidosFiltro++; return; }
       } else if (idx.PROGRAMAS_EDUC >= 0) {
-        // Sin campo de inscripción: usar el multi-select como respaldo
-        if (!_esValorPositivo(row[idx.PROGRAMAS_EDUC])) { omitidosFiltro++; return; }
+        // "¿Qué programas te interesan?" puede ser booleano (col separada) o texto libre
+        const valProg = row[idx.PROGRAMAS_EDUC];
+        const pasa = _esValorPositivo(valProg) || _contieneEducacion(valProg);
+        if (!pasa) { omitidosFiltro++; return; }
       } else {
         // Sin ningún campo conocido: usar presencia de grado como último recurso
         const tieneGrado = idx.GRADO_KOBO >= 0 &&
