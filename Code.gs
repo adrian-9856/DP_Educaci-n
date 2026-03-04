@@ -1641,9 +1641,11 @@ function _koboSincronizarReferenciasInterno(url) {
     const idx = {};
     idx.CREAMOS_ID  = _col('Creamos ID');
     if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _col('Inicio/Creamos ID');
+    if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _colFuzzy('creamos id');   // evita confundir con "¿Ya es participante de Creamos?"
     if (idx.CREAMOS_ID  < 0) idx.CREAMOS_ID  = _colFuzzy('creamos');
 
     idx.NOMBRE      = _col('Nombre Completo');
+    if (idx.NOMBRE      < 0) idx.NOMBRE      = _colFuzzy('nombre completo'); // evita tomar "Nombre del responsable" primero
     if (idx.NOMBRE      < 0) idx.NOMBRE      = _col('Nombre(s)');
     if (idx.NOMBRE      < 0) idx.NOMBRE      = _col('Nombre');
     if (idx.NOMBRE      < 0) idx.NOMBRE      = _colFuzzy('nombre');
