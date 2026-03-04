@@ -296,6 +296,9 @@ function onOpen() {
         .addItem('🔄 Sync → Referencias a Educación',      'koboSincronizarReferencias')
         .addItem('🔄 Sync TODO (Interés + Referencias)',   'koboSincronizarTodo')
         .addSeparator()
+        .addSeparator()
+        .addItem('🔧 Corregir Interés (ID mayús. + edades)', 'koboCorregirHojaInteres')
+        .addSeparator()
         .addItem('🔁 Sync automático (cada minuto)',  'koboInstalarTriggerSync')
         .addItem('⛔ Detener sync automático',          'koboEliminarTriggerSync')
     )
@@ -1769,7 +1772,7 @@ function _koboSincronizarReferenciasInterno(url) {
       }
       if (!nombre) { omitidosSinNombre++; return; }
 
-      const creamosId  = idx.CREAMOS_ID  >= 0 ? String(row[idx.CREAMOS_ID]  || '').trim() : '';
+      const creamosId  = (idx.CREAMOS_ID  >= 0 ? String(row[idx.CREAMOS_ID]  || '').trim() : '').toUpperCase();
       const nombrePref = idx.NOMBRE_PREF >= 0 ? String(row[idx.NOMBRE_PREF] || '').trim() : '';
       const fechaNac   = idx.FECHA_NAC   >= 0 ? String(row[idx.FECHA_NAC]   || '').trim() : '';
       const genero     = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
@@ -2004,6 +2007,52 @@ function koboImportarHistorico() {
   _koboSincronizar(KOBO_URL_HISTORICO, true);
 }
 
+// ── Corregir registros existentes: Creamos ID → MAYÚSCULAS + recalcular edades ──
+function koboCorregirHojaInteres() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName(HOJA_INTERES);
+  if (!hoja) { ui.alert('❌ No existe la hoja "' + HOJA_INTERES + '".'); return; }
+
+  const ultimaFila = hoja.getLastRow();
+  if (ultimaFila < 2) { ui.alert('La hoja está vacía.'); return; }
+
+  const datos = hoja.getRange(2, 1, ultimaFila - 1, COL_INTERES.EDAD).getValues();
+  let corrId = 0, corrEdad = 0;
+
+  datos.forEach(function(fila, i) {
+    // Col 1 (índice 0) = Creamos ID
+    const idOriginal = String(fila[COL_INTERES.CREAMOS_ID - 1] || '').trim();
+    const idUpper    = idOriginal.toUpperCase();
+    if (idOriginal !== idUpper && idOriginal !== '') {
+      hoja.getRange(i + 2, COL_INTERES.CREAMOS_ID).setValue(idUpper);
+      corrId++;
+    }
+
+    // Col 5 (índice 4) = Fecha de Nacimiento, Col 6 (índice 5) = Edad
+    const fechaNacVal = fila[COL_INTERES.FECHA_NAC - 1];
+    const edadActual  = fila[COL_INTERES.EDAD - 1];
+    // Si la edad no es un número válido, recalcular
+    const edadNum = parseInt(edadActual);
+    const edadInvalida = isNaN(edadNum) || edadNum <= 0 || edadNum >= 120;
+    if (edadInvalida && fechaNacVal) {
+      const fechaStr = String(fechaNacVal).trim();
+      const nuevaEdad = _calcularEdad(fechaStr);
+      if (nuevaEdad !== '') {
+        hoja.getRange(i + 2, COL_INTERES.EDAD).setValue(nuevaEdad);
+        corrEdad++;
+      }
+    }
+  });
+
+  ui.alert(
+    '✅ Corrección completada\n\n' +
+    '• Creamos ID → MAYÚSCULAS: ' + corrId + ' filas\n' +
+    '• Edades recalculadas:     ' + corrEdad + ' filas\n' +
+    '• Total revisadas:         ' + datos.length + ' filas'
+  );
+}
+
 function koboSincronizarHojaInteres() {
   _koboSincronizar(KOBO_URL_ACTUAL, false);
 }
@@ -2204,7 +2253,7 @@ function _koboSincronizar(url, modoHistorico) {
         if (!tieneGrado) { omitidosFiltro++; return; }
       }
 
-      const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim();
+      const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim().toUpperCase();
 
       // ── 2. Deduplicar por UUID / CreamosID / DPI ────────────────────────
       const uuid = idx.UUID >= 0 ? String(row[idx.UUID] || '').trim() : '';
@@ -2230,7 +2279,9 @@ function _koboSincronizar(url, modoHistorico) {
       const fechaNacRaw = idx.FECHA_NAC >= 0 ? (row[idx.FECHA_NAC] || '') : '';
       const fechaNac    = String(fechaNacRaw).trim();
       const edadDirecta = idx.EDAD_DIRECTA >= 0 ? String(row[idx.EDAD_DIRECTA] || '').trim() : '';
-      const edad        = edadDirecta !== '' ? edadDirecta : _calcularEdad(fechaNac);
+      // Solo usar edadDirecta si es un número válido (no una fecha u otro valor)
+      const edadEsNumero = edadDirecta !== '' && /^\d{1,3}$/.test(edadDirecta) && parseInt(edadDirecta) < 120;
+      const edad         = edadEsNumero ? parseInt(edadDirecta) : _calcularEdad(fechaNac);
 
       // ── 6. Género → normalizado; "¿Cómo te autodescribes?" como complemento ──
       const generoRaw     = idx.GENERO      >= 0 ? row[idx.GENERO]      : '';
