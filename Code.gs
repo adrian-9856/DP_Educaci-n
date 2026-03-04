@@ -298,6 +298,7 @@ function onOpen() {
         .addSeparator()
         .addSeparator()
         .addItem('🔧 Corregir Interés (ID mayús. + edades)', 'koboCorregirHojaInteres')
+        .addItem('🗑️ Eliminar duplicados de Interés',       'koboEliminarDuplicadosInteres')
         .addSeparator()
         .addItem('🔁 Sync automático (cada minuto)',  'koboInstalarTriggerSync')
         .addItem('⛔ Detener sync automático',          'koboEliminarTriggerSync')
@@ -2053,6 +2054,61 @@ function koboCorregirHojaInteres() {
   );
 }
 
+// ── Eliminar filas duplicadas de la hoja Interés ─────────────────────────────
+function koboEliminarDuplicadosInteres() {
+  const ui   = SpreadsheetApp.getUi();
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName(HOJA_INTERES);
+  if (!hoja) { ui.alert('❌ No existe la hoja "' + HOJA_INTERES + '".'); return; }
+
+  const ultimaFila = hoja.getLastRow();
+  if (ultimaFila < 2) { ui.alert('La hoja está vacía.'); return; }
+
+  const datos = hoja.getRange(2, 1, ultimaFila - 1, COL_INTERES.FECHA_NAC).getValues();
+  const vistos = new Set();
+  const filasAEliminar = []; // números de fila (1-based) a borrar, en orden descendente
+
+  datos.forEach(function(fila, i) {
+    const cid   = String(fila[COL_INTERES.CREAMOS_ID - 1] || '').trim().toUpperCase();
+    const dpi   = String(fila[COL_INTERES.DPI - 1]        || '').trim();
+    const nom   = String(fila[COL_INTERES.NOMBRE - 1]     || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const fnac  = String(fila[COL_INTERES.FECHA_NAC - 1]  || '').trim();
+
+    // La clave de identidad: DPI (mejor), luego Creamos ID, luego nombre+fecha
+    const clave = dpi ? ('dpi:' + dpi)
+                : cid ? ('cid:' + cid)
+                : nom  ? ('nom:' + nom + '|' + fnac)
+                : null;
+
+    if (!clave) return; // fila sin ningún identificador → no tocar
+    if (vistos.has(clave)) {
+      filasAEliminar.push(i + 2); // +2: fila 1 es encabezado, índice 0 = fila 2
+    } else {
+      vistos.add(clave);
+    }
+  });
+
+  if (filasAEliminar.length === 0) {
+    ui.alert('✅ No se encontraron duplicados en la hoja Interés.');
+    return;
+  }
+
+  const r = ui.alert(
+    '🗑️ Eliminar duplicados',
+    'Se encontraron ' + filasAEliminar.length + ' fila(s) duplicadas.\n\n' +
+    '¿Eliminarlas? (se conserva la primera aparición de cada persona)',
+    ui.ButtonSet.YES_NO
+  );
+  if (r !== ui.Button.YES) return;
+
+  // Borrar de abajo hacia arriba para no desplazar índices
+  filasAEliminar.reverse().forEach(function(numFila) {
+    hoja.deleteRow(numFila);
+  });
+
+  ui.alert('✅ Se eliminaron ' + filasAEliminar.length + ' fila(s) duplicadas.');
+}
+
 function koboSincronizarHojaInteres() {
   _koboSincronizar(KOBO_URL_ACTUAL, false);
 }
@@ -2215,20 +2271,24 @@ function _koboSincronizar(url, modoHistorico) {
       return;
     }
 
-    // DPIs, CreamosIDs y UUIDs ya existentes (deduplicación)
-    const ultimaFilaI      = hojaInteres.getLastRow();
-    const dpisExistentes   = new Set();
+    // DPIs, CreamosIDs, UUIDs y claves nombre+fecha ya existentes (deduplicación)
+    const ultimaFilaI       = hojaInteres.getLastRow();
+    const dpisExistentes    = new Set();
     const creamosExistentes = new Set();
+    const nombresExistentes = new Set(); // llave: nombre_lower|fecha_nac (fallback sin DPI ni ID)
     if (ultimaFilaI >= 2) {
-      const filasDatos = hojaInteres.getRange(2, 1, ultimaFilaI - 1, Math.max(COL_INTERES.DPI, COL_INTERES.CREAMOS_ID)).getValues();
+      const filasDatos = hojaInteres.getRange(2, 1, ultimaFilaI - 1, COL_INTERES.FECHA_NAC).getValues();
       filasDatos.forEach(function(r) {
-        const cid = String(r[COL_INTERES.CREAMOS_ID - 1] || '').trim();
-        const dpi = String(r[COL_INTERES.DPI - 1]        || '').trim();
-        if (cid) creamosExistentes.add(cid);
-        if (dpi) dpisExistentes.add(dpi);
+        const cid  = String(r[COL_INTERES.CREAMOS_ID - 1] || '').trim().toUpperCase();
+        const dpi  = String(r[COL_INTERES.DPI - 1]        || '').trim();
+        const nom  = String(r[COL_INTERES.NOMBRE - 1]     || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const fnac = String(r[COL_INTERES.FECHA_NAC - 1]  || '').trim();
+        if (cid)  creamosExistentes.add(cid);
+        if (dpi)  dpisExistentes.add(dpi);
+        if (nom)  nombresExistentes.add(nom + '|' + fnac);
       });
     }
-    // UUIDs vistos en ESTE sync (evita importar duplicados del mismo CSV)
+    // UUIDs vistos en ESTE sync (evita duplicados dentro del mismo CSV)
     const uuidsSyncActual = new Set();
 
     let omitidosFiltro = 0, omitidosDupes = 0;
@@ -2255,13 +2315,15 @@ function _koboSincronizar(url, modoHistorico) {
 
       const creamosId = String(idx.CREAMOS_ID >= 0 ? (row[idx.CREAMOS_ID] || '') : '').trim().toUpperCase();
 
-      // ── 2. Deduplicar por UUID / CreamosID / DPI ────────────────────────
+      // ── 2. Deduplicar por UUID / CreamosID / DPI / Nombre+Fecha ────────────
       const uuid = idx.UUID >= 0 ? String(row[idx.UUID] || '').trim() : '';
       if (uuid && uuidsSyncActual.has(uuid)) { omitidosDupes++; return; }
       const dpi  = idx.DPI  >= 0 ? String(row[idx.DPI]  || '').trim() : '';
       if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
-      // Para formularios sin DPI, usar Creamos ID como clave de dedup
       if (creamosId && creamosExistentes.has(creamosId)) { omitidosDupes++; return; }
+      // Fallback: cuando no hay DPI ni CreamosID, dedup por Nombre Completo + Fecha de Nac.
+      // (evita que el mismo registro se agregue en cada sync automático)
+      const _nomNorm = function(s) { return s.trim().toLowerCase().replace(/\s+/g, ' '); };
 
       // ── 3. Construir Nombre Completo (Nombre + Apellido) ────────────────
       const nombre   = String(idx.NOMBRE  >= 0 ? (row[idx.NOMBRE]  || '') : '').trim();
@@ -2278,6 +2340,12 @@ function _koboSincronizar(url, modoHistorico) {
       // Formulario histórico: se calcula desde "Fecha de nacimiento".
       const fechaNacRaw = idx.FECHA_NAC >= 0 ? (row[idx.FECHA_NAC] || '') : '';
       const fechaNac    = String(fechaNacRaw).trim();
+
+      // ── 5b. Dedup por Nombre+Fecha (fallback cuando no hay DPI ni ID) ────
+      if (!dpi && !creamosId && nombreCompleto) {
+        const claveNom = _nomNorm(nombreCompleto) + '|' + fechaNac;
+        if (nombresExistentes.has(claveNom)) { omitidosDupes++; return; }
+      }
       const edadDirecta = idx.EDAD_DIRECTA >= 0 ? String(row[idx.EDAD_DIRECTA] || '').trim() : '';
       // Solo usar edadDirecta si es un número válido (no una fecha u otro valor)
       const edadEsNumero = edadDirecta !== '' && /^\d{1,3}$/.test(edadDirecta) && parseInt(edadDirecta) < 120;
@@ -2344,6 +2412,9 @@ function _koboSincronizar(url, modoHistorico) {
       if (dpi)       dpisExistentes.add(dpi);
       if (uuid)      uuidsSyncActual.add(uuid);
       if (creamosId) creamosExistentes.add(creamosId);
+      if (!dpi && !creamosId && nombreCompleto) {
+        nombresExistentes.add(_nomNorm(nombreCompleto) + '|' + fechaNac);
+      }
     });
 
     if (!filasNuevas.length) {
