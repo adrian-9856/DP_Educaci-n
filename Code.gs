@@ -1161,6 +1161,38 @@ function crearHojaGuia() {
   filaC(f++, 'Esta hoja explica para qué sirve cada pestaña, qué hace cada columna y cómo usar el sistema paso a paso.', '#E8EAF6');
   esp(f++);
 
+  // ── DIAGRAMA DE FLUJO ─────────────────────────────────────────────────────
+  titulo(f++, '🔄  FLUJO GENERAL DEL SISTEMA', '#263238', '#FFFFFF');
+  esp(f++);
+  filaC(f++,
+    '  📱 FORMULARIO KOBO  →  ☁️ KOBOTOOLBOX  →  📋 HOJA DE INTERÉS  →  📚 HOJA DE GRADO  →  🎓 SEGUIMIENTO GRADUADOS',
+    '#E8EAF6', true);
+  esp(f++);
+  fila2(f++, '  📱 Formulario KoboToolbox',
+    'Participante llena el formulario en línea (tablet / teléfono / compu).',
+    '#C5CAE9', '#E8EAF6');
+  fila2(f++, '  ☁️ KoboToolbox API',
+    'Sistema jalat los datos cada minuto (sync automático) o cuando tú lo pides.',
+    '#C5CAE9', '#E8EAF6');
+  fila2(f++, '  📋 Hoja de Interés',
+    'Solo llegan quienes marcaron SÍ en Educación. Aquí revisas y asignas grado.',
+    '#C5CAE9', '#E8EAF6');
+  fila2(f++, '  📚 Hoja de Grado',
+    'El participante pasa aquí al seleccionar "Acción". Seguimiento durante el ciclo.',
+    '#C5CAE9', '#E8EAF6');
+  fila2(f++, '  🎓 Seguimiento Graduados',
+    'Al terminar Quinto Bachillerato pasa aquí para seguimiento post-programa.',
+    '#C5CAE9', '#E8EAF6');
+  esp(f++);
+  filaC(f++, '  ─ ─ ─  FLUJO PARALELO  ─ ─ ─', '#F5F5F5');
+  fila2(f++, '  📩 Referencias a Educación',
+    'Otro programa de Creamos refiere a alguien al área de Educación. Se sincroniza desde otro formulario Kobo.',
+    '#F3E5F5', '#FAFAFA');
+  fila2(f++, '  ⏳ Lista de Espera',
+    'Personas referidas que no tienen cupo todavía. Desde aquí se pueden mover a Hoja de Interés.',
+    '#FFF3E0', '#FAFAFA');
+  esp(f++);
+
   // ── SECCIÓN 1: LAS HOJAS ──────────────────────────────────────────────────
   titulo(f++, '🗂️  LAS HOJAS DEL SISTEMA', '#1565C0', '#FFFFFF');
   esp(f++);
@@ -1198,6 +1230,43 @@ function crearHojaGuia() {
   fila2(f++, '  Col 7 · Grado', 'Nombre del nivel (ej. Primera Etapa de Primaria).', '#F1F8E9', '#FAFAFA');
   fila2(f++, '  Col 8 · Modalidad', '"Presencial" o "Semi-presencial". Selección manual.', '#F1F8E9', '#FAFAFA');
   fila2(f++, '  ⬅ Col 9 · Estado  (LA MÁS IMPORTANTE)', '"Inscritx" = activo  |  "Retiradx" = se fue (fila se oculta)  |  "Graduadx" = completó el grado, el sistema pregunta si avanzar al año siguiente  |  "Ciclo de Vida Terminado" (solo Quinto Bach.) = pasa a Seguimiento Graduados.', '#A5D6A7', '#E8F5E9');
+  esp(f++);
+
+  subtitulo(f++, '📩  Referencias a Educación  —  REFERIDOS DE OTROS PROGRAMAS', '#EDE7F6');
+  filaC(f++, 'Personas referidas al área de Educación por otro programa (Inclusión Laboral, Apoyo Emocional, etc.). Se sincronizan desde un formulario Kobo diferente. Desde aquí puedes enviarlas a "Lista de Espera".', '#FAFAFA');
+  esp(f++);
+  subtitulo(f++, '   Columnas de "Referencias a Educación"', '#E8EAF6');
+  fila2(f++, '  Col 1 · Creamos ID',         'ID del referido.',                                '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 2 · Nombre Completo',    'Nombre del referido.',                            '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 3 · Nombre Preferido',   'Como prefiere que le llamen.',                   '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 4 · DPI / CUI',          'Documento de identidad.',                        '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 5 · Fecha de Nacimiento','Fecha de nacimiento del referido.',               '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 6 · Edad',               'Edad calculada automáticamente.',                '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 7 · Género',             'Género del referido.',                           '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 8 · Teléfono',           'Contacto.',                                      '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 9 · Zona / Colonia',     'Lugar de residencia.',                           '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 10 · Último Nivel',      'Último grado cursado.',                          '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 11 · Fecha de Referencia','Cuándo fue referido.',                          '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 12 · Responsable',       'Quién hizo la referencia.',                      '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  Col 13 · Estado del Estudio','Si ya se estudió el caso o está pendiente.',     '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  ⬅ Col 14 · Acción',         '"→ Lista de Espera" mueve al referido a la hoja de espera.', '#CE93D8', '#F3E5F5');
+  esp(f++);
+
+  subtitulo(f++, '⏳  Lista de Espera  —  SIN CUPO POR AHORA', '#FFF8E1');
+  filaC(f++, 'Personas referidas que no tienen cupo en ningún grado todavía. Se llena desde "Referencias a Educación" usando la columna Acción. Cuando haya cupo, se mueven manualmente a "Hoja de Interés".', '#FAFAFA');
+  esp(f++);
+  subtitulo(f++, '   Columnas de "Lista de Espera"', '#FFF3E0');
+  fila2(f++, '  Col 1 · Creamos ID',         'ID del referido.',                               '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 2 · Nombre',             'Nombre completo.',                               '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 3 · Nombre Preferido',   'Como prefiere que le llamen.',                  '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 4 · DPI / CUI',          'Documento de identidad.',                       '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 5 · Fecha de Nacimiento','Fecha de nacimiento.',                           '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 6 · Edad',               'Edad calculada.',                               '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 7 · Género',             'Género.',                                       '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 8 · Teléfono',           'Contacto.',                                     '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 9 · Zona / Colonia',     'Lugar de residencia.',                          '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  Col 10 · Último Nivel',      'Último grado cursado.',                         '#FFF8E1', '#FAFAFA');
+  fila2(f++, '  ⬅ Col 11 · Acción',         'Cuando hay cupo: mover manualmente a Hoja de Interés.', '#FFCC80', '#FFF8E1');
   esp(f++);
 
   subtitulo(f++, '🎓  Seguimiento Graduados', '#FFF3E0');
@@ -1299,8 +1368,9 @@ function crearHojaGuia() {
   esp(f++);
   subtitulo(f++, 'Tips generales', '#EDE7F6');
   filaC(f++, '✔  El sync filtra SOLO personas de Educación (marcaron Sí). Nadie de Inclusión Laboral ni otros programas entra.', '#FAFAFA');
-  filaC(f++, '✔  No se crean duplicados: el sistema compara por DPI antes de importar.', '#FAFAFA');
+  filaC(f++, '✔  No se crean duplicados: el sistema compara por DPI / Creamos ID antes de importar.', '#FAFAFA');
   filaC(f++, '✔  Creamos ID viene de KoboToolbox para mantener sincronía con Salesforce.', '#FAFAFA');
+  filaC(f++, '✔  El campo "Edad" en el formulario puede venir como fecha (ej. 1992-01-24). El sistema la detecta, la guarda en "Fecha de Nacimiento" y calcula la edad en años automáticamente.', '#FAFAFA');
   filaC(f++, '✔  Los comentarios de papelería se guardan como nota flotante en la celda del nombre.', '#FAFAFA');
   filaC(f++, '✔  El historial NUNCA se borra, solo se oculta. Siempre puedes ver hojas y filas anteriores.', '#FAFAFA');
   esp(f++);
