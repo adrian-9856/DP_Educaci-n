@@ -160,7 +160,7 @@ const KOBO_MAP = {
   NOMBRE_PREF:    'Nombre Preferido',
   DPI:            'Número de DPI',           // solo formulario histórico
   FECHA_NAC:      'Fecha de nacimiento',     // solo formulario histórico
-  EDAD_DIRECTA:   'Edad',                    // formulario nuevo (viene directo)
+  EDAD_DIRECTA:   'Inicio / Edad',           // formulario actual: columna con prefijo de grupo
   GENERO:         'Género',
   AUTODESCRIBE:   '¿Cómo te autodescribes?', // formulario nuevo (complementa Género)
   TELEFONO:       'Número de Teléfono',
@@ -2181,6 +2181,7 @@ function _koboSincronizar(url, modoHistorico) {
 
     // Edad directa — formulario actual: "Inicio / Edad" (no hay Fecha de Nacimiento)
     if (idx.EDAD_DIRECTA < 0) idx.EDAD_DIRECTA = _col('Inicio/Edad');
+    if (idx.EDAD_DIRECTA < 0) idx.EDAD_DIRECTA = _col('Edad');          // formulario histórico (sin prefijo)
     if (idx.EDAD_DIRECTA < 0) idx.EDAD_DIRECTA = _colFuzzy('inicio edad');
     if (idx.EDAD_DIRECTA < 0) idx.EDAD_DIRECTA = _colFuzzy('edad');
 
