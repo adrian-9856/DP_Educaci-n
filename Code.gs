@@ -258,7 +258,10 @@ const ESTADOS_POST_GRAD = [
 // ────────────────────────────────────────────────────────────────────────────
 
 function onOpen() {
-  const ui = SpreadsheetApp.getUi();
+  // onOpen puede ser invocado por un trigger instalable (sin acceso a UI)
+  // además del trigger simple normal. El try-catch evita el error en ese caso.
+  let ui;
+  try { ui = SpreadsheetApp.getUi(); } catch(e) { return; }
   ui.createMenu('DP Educación')
     .addItem('📖  Guía de uso',                    'mostrarGuiaDeUso')
     .addSeparator()
