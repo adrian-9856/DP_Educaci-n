@@ -8,7 +8,7 @@
 // ────────────────────────────────────────────────────────────────────────────
 
 const HOJA_INTERES      = 'Hoja de Interés';
-const HOJA_REFERENCIAS  = 'Referencias a Educación';
+const HOJA_REFERENCIAS  = 'Referencias a Programas';
 const HOJA_LISTA_ESPERA = 'Lista de Espera';
 
 // Año del ciclo escolar activo — cambia aquí cada año
@@ -32,7 +32,7 @@ const COL_INTERES = {
   ACCION:      14   // Desplegable: Enviar a grado
 };
 
-// Columnas de "Referencias a Educación" (1-based) — 14 columnas
+// Columnas de "Referencias a Programas" (1-based) — 14 columnas
 const COL_REF = {
   CREAMOS_ID:     1,   // Creamos ID
   NOMBRE:         2,   // Nombre Completo
@@ -137,7 +137,7 @@ const KOBO_URL_ACTUAL = 'https://kf.kobotoolbox.org/api/v2/assets/auvEELWQEgiwF5
 // URL histórica — formulario de años anteriores (importación única / manual)
 const KOBO_URL_HISTORICO = 'https://kf.kobotoolbox.org/api/v2/assets/akz5K2bGfvvisQaE7VaHev/export-settings/esuV4RKqQhYUUaUizfWBP8S/data.csv';
 
-// URL formulario de Referencias a Educación
+// URL formulario de Referencias a Programas
 const KOBO_URL_REFERENCIAS = 'https://kf.kobotoolbox.org/api/v2/assets/afuD8C8AzoLfd4o5ksTWUw/export-settings/es52swrnjWcz8NnhY5Wyng3/data.csv';
 
 // Colores encabezado Kobo
@@ -263,7 +263,7 @@ function onOpen() {
     .addItem('📖  Guía de uso',                    'mostrarGuiaDeUso')
     .addSeparator()
     .addItem('⚙️  Configurar hoja Interés',        'setupHojaInteres')
-    .addItem('📥 Configurar Referencias a Educ.',   'setupHojaReferencias')
+    .addItem('📥 Configurar Referencias a Programas', 'setupHojaReferencias')
     .addItem('⏳ Configurar Lista de Espera',        'setupHojaListaEspera')
     .addItem('🔧  Instalar trigger automático',     'installTriggers')
     .addSeparator()
@@ -293,7 +293,7 @@ function onOpen() {
         .addSeparator()
         .addItem('📦 Importar datos HISTÓRICOS',           'koboImportarHistorico')
         .addItem('🔄 Sync → hoja Interés (actual)',        'koboSincronizarHojaInteres')
-        .addItem('🔄 Sync → Referencias a Educación',      'koboSincronizarReferencias')
+        .addItem('🔄 Sync → Referencias a Programas',       'koboSincronizarReferencias')
         .addItem('🔄 Sync TODO (Interés + Referencias)',   'koboSincronizarTodo')
         .addSeparator()
         .addSeparator()
@@ -713,10 +713,9 @@ function onEdit(e) {
     return;
   }
 
-  // ── Transferir desde Referencias a Educación → Lista de Espera ─────────
+  // ── Acción en Referencias a Programas (solo marca Sí/No, sin transferencia) ──
   if (nombreH === HOJA_REFERENCIAS && col === COL_REF.ACCION && fila >= 2) {
-    if (valor === 'Enviar a: Lista de Espera') _transReferenciasAListaEspera(fila);
-    return;
+    return; // El desplegable Sí/No solo guarda el valor, no hace transferencia
   }
 
   // ── Transferir desde Lista de Espera → Hoja de Grado ─────────────────────
@@ -1018,7 +1017,7 @@ function reiniciarSistema() {
     '• Hoja de Interés (todos los registros)\n' +
     '• Todas las hojas de grado (todos los años)\n' +
     '• Hoja Seguimiento Graduados\n' +
-    '• Hoja Referencias a Educación\n' +
+    '• Hoja Referencias a Programas\n' +
     '• Hoja Lista de Espera\n\n' +
     '⚠️ Los datos NO se pueden recuperar después.\n\n' +
     '¿Estás seguro de que quieres continuar?',
@@ -1083,7 +1082,7 @@ function reiniciarSistema() {
     '• Hoja de Interés\n' +
     '• ' + GRADOS.length + ' hojas de grado (' + SCHOOL_YEAR + ')\n' +
     '• Hoja Seguimiento Graduados\n' +
-    '• Hoja Referencias a Educación\n' +
+    '• Hoja Referencias a Programas\n' +
     '• Hoja Lista de Espera\n' +
     '• Triggers automáticos\n\n' +
     '💡 Recuerda configurar el token de KoboToolbox en:\n' +
@@ -1185,7 +1184,7 @@ function crearHojaGuia() {
     '#C5CAE9', '#E8EAF6');
   esp(f++);
   filaC(f++, '  ─ ─ ─  FLUJO PARALELO  ─ ─ ─', '#F5F5F5');
-  fila2(f++, '  📩 Referencias a Educación',
+  fila2(f++, '  📩 Referencias a Programas',
     'Otro programa de Creamos refiere a alguien al área de Educación. Se sincroniza desde otro formulario Kobo.',
     '#F3E5F5', '#FAFAFA');
   fila2(f++, '  ⏳ Lista de Espera',
@@ -1232,10 +1231,10 @@ function crearHojaGuia() {
   fila2(f++, '  ⬅ Col 9 · Estado  (LA MÁS IMPORTANTE)', '"Inscritx" = activo  |  "Retiradx" = se fue (fila se oculta)  |  "Graduadx" = completó el grado, el sistema pregunta si avanzar al año siguiente  |  "Ciclo de Vida Terminado" (solo Quinto Bach.) = pasa a Seguimiento Graduados.', '#A5D6A7', '#E8F5E9');
   esp(f++);
 
-  subtitulo(f++, '📩  Referencias a Educación  —  REFERIDOS DE OTROS PROGRAMAS', '#EDE7F6');
-  filaC(f++, 'Personas referidas al área de Educación por otro programa (Inclusión Laboral, Apoyo Emocional, etc.). Se sincronizan desde un formulario Kobo diferente. Desde aquí puedes enviarlas a "Lista de Espera".', '#FAFAFA');
+  subtitulo(f++, '📩  Referencias a Programas  —  REFERIDOS DE CUALQUIER PROGRAMA', '#EDE7F6');
+  filaC(f++, 'Personas referidas por cualquier programa de Creamos (Inclusión Laboral, Apoyo Emocional, etc.). Se sincronizan desde un formulario Kobo de referencias. La columna "¿Llena Hoja de Interés?" permite marcar a quién ya fue procesado manualmente.', '#FAFAFA');
   esp(f++);
-  subtitulo(f++, '   Columnas de "Referencias a Educación"', '#E8EAF6');
+  subtitulo(f++, '   Columnas de "Referencias a Programas"', '#E8EAF6');
   fila2(f++, '  Col 1 · Creamos ID',         'ID del referido.',                                '#EDE7F6', '#FAFAFA');
   fila2(f++, '  Col 2 · Nombre Completo',    'Nombre del referido.',                            '#EDE7F6', '#FAFAFA');
   fila2(f++, '  Col 3 · Nombre Preferido',   'Como prefiere que le llamen.',                   '#EDE7F6', '#FAFAFA');
@@ -1249,11 +1248,11 @@ function crearHojaGuia() {
   fila2(f++, '  Col 11 · Fecha de Referencia','Cuándo fue referido.',                          '#EDE7F6', '#FAFAFA');
   fila2(f++, '  Col 12 · Responsable',       'Quién hizo la referencia.',                      '#EDE7F6', '#FAFAFA');
   fila2(f++, '  Col 13 · Estado del Estudio','Si ya se estudió el caso o está pendiente.',     '#EDE7F6', '#FAFAFA');
-  fila2(f++, '  ⬅ Col 14 · Acción',         '"→ Lista de Espera" mueve al referido a la hoja de espera.', '#CE93D8', '#F3E5F5');
+  fila2(f++, '  ⬅ Col 14 · ¿Llena Hoja de Interés?', '"Sí" = ya fue procesado / ingresado a Hoja de Interés.  "No" = pendiente. Solo marca, no hace ninguna transferencia automática.', '#CE93D8', '#F3E5F5');
   esp(f++);
 
   subtitulo(f++, '⏳  Lista de Espera  —  SIN CUPO POR AHORA', '#FFF8E1');
-  filaC(f++, 'Personas referidas que no tienen cupo en ningún grado todavía. Se llena desde "Referencias a Educación" usando la columna Acción. Cuando haya cupo, se mueven manualmente a "Hoja de Interés".', '#FAFAFA');
+  filaC(f++, 'Personas referidas que aún no tienen cupo. Se agregan manualmente aquí. Cuando haya cupo, usa la columna Acción para enviarlas a su hoja de grado.', '#FAFAFA');
   esp(f++);
   subtitulo(f++, '   Columnas de "Lista de Espera"', '#FFF3E0');
   fila2(f++, '  Col 1 · Creamos ID',         'ID del referido.',                               '#FFF8E1', '#FAFAFA');
@@ -1296,7 +1295,7 @@ function crearHojaGuia() {
   fila2(f++, '  🎓 Seguimiento', '"Configurar" crea la hoja. "Registrar graduado manual" agrega a alguien que ya terminó sin estar en el sistema.', '#E3F2FD', '#FAFAFA');
   fila2(f++, '  🔑 KoboToolbox · Token', 'Guarda el token de API. Necesario la primera vez o si el token expira.', '#EDE7F6', '#FAFAFA');
   fila2(f++, '  📦 KoboToolbox · Histórico', 'Importa registros del formulario antiguo. Solo usar una vez para migración inicial.', '#EDE7F6', '#FAFAFA');
-  fila2(f++, '  🔄 KoboToolbox · Sync manual', 'Importa los registros nuevos del formulario actual. Solo entran personas con Educación = Sí.', '#EDE7F6', '#FAFAFA');
+  fila2(f++, '  🔄 KoboToolbox · Sync manual', 'Importa los registros nuevos del formulario actual. Solo entran personas con Educación = Sí. El sistema evita duplicados por DPI, Creamos ID y nombre+fecha.', '#EDE7F6', '#FAFAFA');
   fila2(f++, '  🔁 Sync automático (c/min)  ⬅', 'Activa sincronización cada minuto. KoboToolbox se revisa solo sin hacer nada.', '#CE93D8', '#F3E5F5');
   fila2(f++, '  ⛔ Detener sync automático', 'Desactiva el sync cada minuto.', '#EDE7F6', '#FAFAFA');
   esp(f++);
@@ -1434,7 +1433,7 @@ function removeTriggers() {
 //  SECCIÓN 9 · REFERENCIAS A EDUCACIÓN & LISTA DE ESPERA
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── 9.1  Configurar hoja "Referencias a Educación" ───────────────────────────
+// ── 9.1  Configurar hoja "Referencias a Programas" ───────────────────────────
 function setupHojaReferencias() {
   const ss   = SpreadsheetApp.getActiveSpreadsheet();
   const ui   = SpreadsheetApp.getUi();
@@ -1443,9 +1442,9 @@ function setupHojaReferencias() {
     'Fecha de Nacimiento', 'Edad', 'Género', 'Teléfono',
     'Zona / Colonia', 'Último Nivel Cursado',
     'Fecha de Referencia', 'Responsable de Referencia', 'Grado de Interés',
-    'Acción'
+    '¿Llena Hoja de Interés?'
   ];
-  const ACCIONES_REF = ['-- Seleccionar --', 'Enviar a: Lista de Espera'];
+  const ACCIONES_REF = ['Sí', 'No'];
 
   let hoja = ss.getSheetByName(HOJA_REFERENCIAS);
   if (!hoja) {
@@ -1482,9 +1481,9 @@ function setupHojaReferencias() {
 
   ui.alert(
     '✅ Hoja "' + HOJA_REFERENCIAS + '" configurada.\n\n' +
-    'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Fecha de Referencia · Responsable · Grado de Interés · Acción\n\n' +
-    '⚠️ El Sync importa SOLO registros referidos a Educación.\n\n' +
-    'Acción disponible: "Enviar a: Lista de Espera"\n\n' +
+    'Columnas: Creamos ID · Nombre · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Fecha de Ref · Responsable · Grado de Interés · ¿Llena Hoja de Interés?\n\n' +
+    '⚠️ El Sync importa registros referidos a cualquier programa.\n\n' +
+    'Columna "¿Llena Hoja de Interés?": marca Sí/No para llevar control de quién ya fue procesado.\n\n' +
     'Usa Menú → 🌐 KoboToolbox → 🔄 Sync → Referencias para importar datos.'
   );
 }
@@ -1678,7 +1677,7 @@ function _transListaEsperaAGrado(fila, grado) {
   ss.toast('"' + nombre + '" → "' + nombreHoja + '" · ID: ' + id, '✅ Transferido a grado', 5);
 }
 
-// ── 9.5  Sync KoboToolbox → "Referencias a Educación" ────────────────────────
+// ── 9.5  Sync KoboToolbox → "Referencias a Programas" ────────────────────────
 function koboSincronizarReferencias() {
   _koboSincronizarReferenciasInterno(KOBO_URL_REFERENCIAS);
 }
@@ -1688,13 +1687,21 @@ function koboSincronizarTodo() {
   const ui = SpreadsheetApp.getUi();
   ui.alert('🔄 Sincronizando Hoja de Interés...\n\nEsto puede tomar unos segundos.');
   _koboSincronizar(KOBO_URL_ACTUAL, false);
-  ui.alert('🔄 Sincronizando Referencias a Educación...\n\nEsto puede tomar unos segundos.');
+  ui.alert('🔄 Sincronizando Referencias a Programas...\n\nEsto puede tomar unos segundos.');
   _koboSincronizarReferenciasInterno(KOBO_URL_REFERENCIAS);
-  ui.alert('✅ Sync completo\n\nSe sincronizaron:\n• Hoja de Interés\n• Referencias a Educación');
+  ui.alert('✅ Sync completo\n\nSe sincronizaron:\n• Hoja de Interés\n• Referencias a Programas');
 }
 
 function _koboSincronizarReferenciasInterno(url) {
   let ui; try { ui = SpreadsheetApp.getUi(); } catch(e) { ui = null; }
+
+  // Evita ejecuciones simultáneas
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(0)) {
+    if (ui) ui.alert('⏳ Sync ya en ejecución. Espera un momento e inténtalo de nuevo.');
+    return;
+  }
+
   try {
     const csv  = _koboFetchCsv(url);
     const rows = _koboParseCsv(csv);
@@ -1800,16 +1807,20 @@ function _koboSincronizarReferenciasInterno(url) {
     let   hojaRef = ss.getSheetByName(HOJA_REFERENCIAS);
     if (!hojaRef) { setupHojaReferencias(); hojaRef = ss.getSheetByName(HOJA_REFERENCIAS); }
 
-    const ultimaFila      = hojaRef.getLastRow();
-    const dpisExistentes  = new Set();
-    const uuidsExistentes = new Set();
+    const ultimaFila        = hojaRef.getLastRow();
+    const dpisExistentes    = new Set();
+    const creamosExistentes = new Set();
+    const nombresExistentes = new Set(); // fallback: nombre_lower|fecha
     if (ultimaFila >= 2) {
       const datosHoja = hojaRef.getRange(2, 1, ultimaFila - 1, 14).getValues();
       datosHoja.forEach(function(r) {
-        const dpi  = String(r[COL_REF.DPI  - 1] || '').trim();
-        // UUID se guarda en col 13 (ESTADO_ESTUDIO) como metadato oculto si hay espacio
-        // Por ahora usamos DPI + nombre para dedup
-        if (dpi) dpisExistentes.add(dpi);
+        const cid  = String(r[COL_REF.CREAMOS_ID - 1] || '').trim().toUpperCase();
+        const dpi  = String(r[COL_REF.DPI        - 1] || '').trim();
+        const nom  = String(r[COL_REF.NOMBRE     - 1] || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const fnac = _normFechaDedup(r[COL_REF.FECHA_NAC - 1]);
+        if (cid)  creamosExistentes.add(cid);
+        if (dpi)  dpisExistentes.add(dpi);
+        if (nom)  nombresExistentes.add(nom + '|' + fnac);
       });
     }
     // UUIDs vistos en este batch (evita dobles dentro del mismo CSV)
@@ -1831,9 +1842,11 @@ function _koboSincronizarReferenciasInterno(url) {
       const uuid = idx.UUID >= 0 ? String(row[idx.UUID] || '').trim() : '';
       if (uuid && uuidsBatch.has(uuid)) { omitidosDupes++; return; }
 
-      // ── 3. Dedup por DPI (contra hoja existente) ─────────────────────────
-      const dpi = idx.DPI >= 0 ? String(row[idx.DPI] || '').trim() : '';
-      if (dpi && dpisExistentes.has(dpi)) { omitidosDupes++; return; }
+      // ── 3. Dedup por DPI / CreamosID (contra hoja existente) ─────────────
+      const dpi       = idx.DPI        >= 0 ? String(row[idx.DPI]        || '').trim() : '';
+      const creamosId = idx.CREAMOS_ID >= 0 ? String(row[idx.CREAMOS_ID] || '').trim().toUpperCase() : '';
+      if (dpi       && dpisExistentes.has(dpi))       { omitidosDupes++; return; }
+      if (creamosId && creamosExistentes.has(creamosId)) { omitidosDupes++; return; }
 
       // ── 4. Construir nombre ───────────────────────────────────────────────
       let nombre = idx.NOMBRE >= 0 ? String(row[idx.NOMBRE] || '').trim() : '';
@@ -1843,11 +1856,16 @@ function _koboSincronizarReferenciasInterno(url) {
       }
       if (!nombre) { omitidosSinNombre++; return; }
 
-      const creamosId  = (idx.CREAMOS_ID  >= 0 ? String(row[idx.CREAMOS_ID]  || '').trim() : '').toUpperCase();
       const nombrePref = idx.NOMBRE_PREF >= 0 ? String(row[idx.NOMBRE_PREF] || '').trim() : '';
       const fechaNac   = idx.FECHA_NAC   >= 0 ? String(row[idx.FECHA_NAC]   || '').trim() : '';
-      const genero     = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
-      const telefono   = idx.TELEFONO    >= 0 ? String(row[idx.TELEFONO]    || '').trim() : '';
+
+      // ── 4b. Dedup fallback por nombre + fecha de nacimiento ───────────────
+      const fechaNacNorm  = _normFechaDedup(fechaNac);
+      const claveNomFecha = nombre.toLowerCase().replace(/\s+/g, ' ') + '|' + fechaNacNorm;
+      if (nombresExistentes.has(claveNomFecha)) { omitidosDupes++; return; }
+
+      const genero   = _normalizarGenero(idx.GENERO >= 0 ? row[idx.GENERO] : '');
+      const telefono = idx.TELEFONO >= 0 ? String(row[idx.TELEFONO] || '').trim() : '';
 
       let zona = idx.ZONA >= 0 ? String(row[idx.ZONA] || '').trim() : '';
       if (idx.ZONA_ESPEC >= 0) {
@@ -1869,14 +1887,16 @@ function _koboSincronizarReferenciasInterno(url) {
         }
       }
 
-      if (dpi)  dpisExistentes.add(dpi);
-      if (uuid) uuidsBatch.add(uuid);
+      if (dpi)       dpisExistentes.add(dpi);
+      if (creamosId) creamosExistentes.add(creamosId);
+      if (uuid)      uuidsBatch.add(uuid);
+      nombresExistentes.add(claveNomFecha);
 
       filasNuevas.push([
         creamosId, nombre, nombrePref, dpi,
         fechaNac, edad, genero, telefono, zona, ultimoAnio,
         fechaRef, responsable, gradoInteres,
-        '-- Seleccionar --'
+        'No'
       ]);
       importados++;
     });
@@ -1885,7 +1905,7 @@ function _koboSincronizarReferenciasInterno(url) {
       const filaInicio = Math.max(hojaRef.getLastRow() + 1, 2);
       hojaRef.getRange(filaInicio, 1, filasNuevas.length, 14).setValues(filasNuevas);
       const valAccion = SpreadsheetApp.newDataValidation()
-        .requireValueInList(['-- Seleccionar --', 'Enviar a: Lista de Espera'], true)
+        .requireValueInList(['Sí', 'No'], true)
         .setAllowInvalid(false).build();
       hojaRef.getRange(filaInicio, COL_REF.ACCION, filasNuevas.length, 1).setDataValidation(valAccion);
     }
@@ -1903,6 +1923,8 @@ function _koboSincronizarReferenciasInterno(url) {
 
   } catch(e) {
     if (ui) ui.alert('❌ Error en sync de Referencias:\n' + e.message + '\n\nStack: ' + e.stack);
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -2188,6 +2210,14 @@ function koboSincronizarHojaInteres() {
 // modoHistorico: si true, NO filtra por campo INSCRIPCION (todos son de educación)
 function _koboSincronizar(url, modoHistorico) {
   let ui; try { ui = SpreadsheetApp.getUi(); } catch(e) { ui = null; }
+
+  // Evita ejecuciones simultáneas (auto-sync cada minuto puede solaparse)
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(0)) {
+    if (ui) ui.alert('⏳ Sync ya en ejecución. Espera un momento e inténtalo de nuevo.');
+    return;
+  }
+
   try {
     const csv  = _koboFetchCsv(url);
     const rows = _koboParseCsv(csv);
@@ -2364,7 +2394,7 @@ function _koboSincronizar(url, modoHistorico) {
         const cid  = String(r[COL_INTERES.CREAMOS_ID - 1] || '').trim().toUpperCase();
         const dpi  = String(r[COL_INTERES.DPI - 1]        || '').trim();
         const nom  = String(r[COL_INTERES.NOMBRE - 1]     || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        const fnac = String(r[COL_INTERES.FECHA_NAC - 1]  || '').trim();
+        const fnac = _normFechaDedup(r[COL_INTERES.FECHA_NAC - 1]);
         if (cid)  creamosExistentes.add(cid);
         if (dpi)  dpisExistentes.add(dpi);
         if (nom)  nombresExistentes.add(nom + '|' + fnac);
@@ -2431,8 +2461,10 @@ function _koboSincronizar(url, modoHistorico) {
       const fechaNac = edadEsFecha ? edadDirecta : fechaNacHistorico;
 
       // ── 5b. Dedup por Nombre+Fecha (fallback cuando no hay DPI ni ID) ────
+      // Normalizar la fecha del CSV al mismo formato que se guarda al leer la hoja
+      const fechaNacNorm = _normFechaDedup(fechaNac);
       if (!dpi && !creamosId && nombreCompleto) {
-        const claveNom = _nomNorm(nombreCompleto) + '|' + fechaNac;
+        const claveNom = _nomNorm(nombreCompleto) + '|' + fechaNacNorm;
         if (nombresExistentes.has(claveNom)) { omitidosDupes++; return; }
       }
       const edadNum      = parseFloat(edadDirecta);
@@ -2502,7 +2534,7 @@ function _koboSincronizar(url, modoHistorico) {
       if (uuid)      uuidsSyncActual.add(uuid);
       if (creamosId) creamosExistentes.add(creamosId);
       if (!dpi && !creamosId && nombreCompleto) {
-        nombresExistentes.add(_nomNorm(nombreCompleto) + '|' + fechaNac);
+        nombresExistentes.add(_nomNorm(nombreCompleto) + '|' + fechaNacNorm);
       }
     });
 
@@ -2557,7 +2589,26 @@ function _koboSincronizar(url, modoHistorico) {
   } catch (err) {
     if (ui) ui.alert('❌ Error en sincronización\n\n' + err.message);
     else Logger.log('Error sync Interés: ' + err.message);
+  } finally {
+    lock.releaseLock();
   }
+}
+
+// ── Helper: normalizar fecha para deduplicación ───────────────────────────────
+// Convierte Date objects y strings a formato "YYYY-M-D" uniforme
+function _normFechaDedup(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return val.getFullYear() + '-' + (val.getMonth() + 1) + '-' + val.getDate();
+  }
+  const s = String(val).trim();
+  // Detecta YYYY-MM-DD o YYYY-M-D
+  const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return iso[1] + '-' + parseInt(iso[2]) + '-' + parseInt(iso[3]);
+  // Detecta D/M/YYYY o DD/MM/YYYY
+  const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dmy) return dmy[3] + '-' + parseInt(dmy[2]) + '-' + parseInt(dmy[1]);
+  return s;
 }
 
 // ── Helper: calcular edad desde fecha de nacimiento ───────────────────────────
@@ -2609,7 +2660,7 @@ function koboInstalarTriggerSync() {
     '✅ Sync automático activado (cada minuto)\n\n' +
     'Se sincronizarán automáticamente:\n' +
     '• Hoja de Interés\n' +
-    '• Referencias a Educación\n\n' +
+    '• Referencias a Programas\n\n' +
     'Para detenerlo: menú → 🌐 KoboToolbox → ⛔ Detener sync automático'
   );
 }
