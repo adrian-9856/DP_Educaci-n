@@ -318,9 +318,10 @@ function crearHojaBasicosEtapa2()      { crearHojaGrado('Segunda Etapa de Básic
 function crearHojaCuartoBachillerato() { crearHojaGrado('Cuarto Bachillerato'); }
 function crearHojaQuintoBachillerato() { crearHojaGrado('Quinto Bachillerato'); }
 
-function crearTodasLasHojas() {
+function crearTodasLasHojas(silencioso) {
+  if (silencioso === undefined) silencioso = false;
   GRADOS.forEach(g => crearHojaGrado(g, true));
-  SpreadsheetApp.getUi().alert('✅ Todas las hojas de grado fueron creadas correctamente.');
+  if (!silencioso) SpreadsheetApp.getUi().alert('✅ Todas las hojas de grado fueron creadas correctamente.');
 }
 
 
@@ -328,7 +329,8 @@ function crearTodasLasHojas() {
 //  SECCIÓN 3 · CONFIGURACIÓN DE LA HOJA "INTERÉS"
 // ────────────────────────────────────────────────────────────────────────────
 
-function setupHojaInteres() {
+function setupHojaInteres(silencioso) {
+  if (silencioso === undefined) silencioso = false;
   const ss  = SpreadsheetApp.getActiveSpreadsheet();
   let   hoja = ss.getSheetByName(HOJA_INTERES);
 
@@ -481,7 +483,7 @@ function setupHojaInteres() {
     'Para transferir: DP Educación → 🔄 Procesar acciones pendientes'
   );
 
-  SpreadsheetApp.getUi().alert(
+  if (!silencioso) SpreadsheetApp.getUi().alert(
     '✅ Hoja "Interés" configurada (14 columnas).\n\n' +
     'Pasos siguientes:\n' +
     '1. Crea los salones: menú → 📚 Crear hoja de grado\n' +
@@ -1028,16 +1030,6 @@ function reiniciarSistema() {
   );
   if (r1 !== ui.Button.YES) { ui.alert('Operación cancelada.'); return; }
 
-  const r2 = ui.prompt(
-    '🔐 Confirmación final',
-    'Escribe exactamente  REINICIAR  para confirmar:',
-    ui.ButtonSet.OK_CANCEL
-  );
-  if (r2.getSelectedButton() !== ui.Button.OK) { ui.alert('Operación cancelada.'); return; }
-  if ((r2.getResponseText() || '').trim() !== 'REINICIAR') {
-    ui.alert('❌ Texto incorrecto. Operación cancelada.'); return;
-  }
-
   // 1. Eliminar todos los triggers del proyecto
   ScriptApp.getProjectTriggers().forEach(function(t) { ScriptApp.deleteTrigger(t); });
 
@@ -1069,15 +1061,22 @@ function reiniciarSistema() {
   });
 
   // Reinstalar todo (crea Interés + grados + Seguimiento + Referencias + Lista de Espera + triggers)
-  setupHojaInteres();
-  crearTodasLasHojas();
-  setupHojaSeguimiento();
-  setupHojaReferencias();
-  setupHojaListaEspera();
-  installTriggers();
+  try {
+    setupHojaInteres(true);
+    crearTodasLasHojas(true);
+    setupHojaSeguimiento(true);
+    setupHojaReferencias(true);
+    setupHojaListaEspera(true);
+    installTriggers();
+  } catch(e) {
+    ui.alert('⚠️ Error durante reinstalación:\n' + e.message);
+  }
 
-  // Ahora que existen las hojas nuevas, eliminar la temporal
-  try { ss.deleteSheet(hojaTemporal); } catch(e) { /* ignorar */ }
+  // Ahora que existen las hojas nuevas, eliminar la temporal (usar nombre por si la ref quedó stale)
+  try {
+    const temp = ss.getSheetByName('_reinstalando_');
+    if (temp) ss.deleteSheet(temp);
+  } catch(e) { /* ignorar */ }
 
   ui.alert(
     '✅ Sistema reiniciado\n\n' +
@@ -1437,7 +1436,8 @@ function removeTriggers() {
 // ════════════════════════════════════════════════════════════════════════════
 
 // ── 9.1  Configurar hoja "Referencias a Programas" ───────────────────────────
-function setupHojaReferencias() {
+function setupHojaReferencias(silencioso) {
+  if (silencioso === undefined) silencioso = false;
   const ss   = SpreadsheetApp.getActiveSpreadsheet();
   const ui   = SpreadsheetApp.getUi();
   const ENCABEZADOS = [
@@ -1482,7 +1482,7 @@ function setupHojaReferencias() {
     .requireValueInList(['Hombre', 'Mujer', 'Otro'], true).setAllowInvalid(true).build();
   hoja.getRange(2, COL_REF.GENERO, hoja.getMaxRows() - 1, 1).setDataValidation(valGen);
 
-  ui.alert(
+  if (!silencioso) ui.alert(
     '✅ Hoja "' + HOJA_REFERENCIAS + '" configurada.\n\n' +
     'Columnas: Creamos ID · Nombre · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Fecha de Ref · Responsable · Grado de Interés · ¿Llena Hoja de Interés?\n\n' +
     '⚠️ El Sync importa registros referidos a cualquier programa.\n\n' +
@@ -1492,7 +1492,8 @@ function setupHojaReferencias() {
 }
 
 // ── 9.2  Configurar hoja "Lista de Espera" ───────────────────────────────────
-function setupHojaListaEspera() {
+function setupHojaListaEspera(silencioso) {
+  if (silencioso === undefined) silencioso = false;
   const ss   = SpreadsheetApp.getActiveSpreadsheet();
   const ui   = SpreadsheetApp.getUi();
   const ENCABEZADOS = [
@@ -1535,7 +1536,7 @@ function setupHojaListaEspera() {
     .requireValueInList(['Hombre', 'Mujer', 'Otro'], true).setAllowInvalid(true).build();
   hoja.getRange(2, COL_LISTA.GENERO, hoja.getMaxRows() - 1, 1).setDataValidation(valGen);
 
-  ui.alert(
+  if (!silencioso) ui.alert(
     '✅ Hoja "' + HOJA_LISTA_ESPERA + '" configurada.\n\n' +
     'Columnas: Creamos ID · Nombre Completo · Nombre Preferido · DPI · Fecha Nac · Edad · Género · Teléfono · Zona · Último Nivel · Acción\n\n' +
     'Acción: selecciona "Enviar a: [Grado]" para transferir a la hoja de grado.'
@@ -2699,7 +2700,8 @@ function koboEliminarTriggerSync() {
 
 // ── 9.1  Configurar hoja Seguimiento ─────────────────────────────────────────
 
-function setupHojaSeguimiento() {
+function setupHojaSeguimiento(silencioso) {
+  if (silencioso === undefined) silencioso = false;
   const ss  = SpreadsheetApp.getActiveSpreadsheet();
   let   hoja = ss.getSheetByName(HOJA_SEGUIMIENTO);
 
@@ -2778,7 +2780,7 @@ function setupHojaSeguimiento() {
       .setBackground('#F3E5F5').setRanges([dr]).build()
   ]);
 
-  SpreadsheetApp.getUi().alert(
+  if (!silencioso) SpreadsheetApp.getUi().alert(
     '✅ Hoja "' + HOJA_SEGUIMIENTO + '" configurada.\n\n' +
     'Cuando un alumno de Quinto Bachillerato cambie su\n' +
     'Estado a "Ciclo de Vida Terminado", se ofrecerá registrarlo aquí\n' +
