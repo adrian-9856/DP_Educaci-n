@@ -2464,10 +2464,12 @@ function _koboSincronizar(url, modoHistorico) {
       // fechaNac: si el campo Edad trae una fecha, esa es la fecha de nacimiento
       const fechaNac = edadEsFecha ? edadDirecta : fechaNacHistorico;
 
-      // ── 5b. Dedup por Nombre+Fecha (fallback cuando no hay DPI ni ID) ────
-      // Normalizar la fecha del CSV al mismo formato que se guarda al leer la hoja
+      // ── 5b. Dedup por Nombre+Fecha (fallback final) ──────────────────────
+      // Corre siempre, igual que en Referencias, para cubrir casos donde
+      // el mismo alumno tiene distinto CreamosID/DPI en distintos envíos
+      // (p.ej. alumno del histórico sin CreamosID vs. mismo alumno en formulario nuevo)
       const fechaNacNorm = _normFechaDedup(fechaNac);
-      if (!dpi && !creamosId && nombreCompleto) {
+      if (nombreCompleto) {
         const claveNom = _nomNorm(nombreCompleto) + '|' + fechaNacNorm;
         if (nombresExistentes.has(claveNom)) { omitidosDupes++; return; }
       }
@@ -2534,12 +2536,10 @@ function _koboSincronizar(url, modoHistorico) {
         accion             // 14 Acción
       ]);
 
-      if (dpi)       dpisExistentes.add(dpi);
-      if (uuid)      uuidsSyncActual.add(uuid);
-      if (creamosId) creamosExistentes.add(creamosId);
-      if (!dpi && !creamosId && nombreCompleto) {
-        nombresExistentes.add(_nomNorm(nombreCompleto) + '|' + fechaNacNorm);
-      }
+      if (dpi)          dpisExistentes.add(dpi);
+      if (uuid)         uuidsSyncActual.add(uuid);
+      if (creamosId)    creamosExistentes.add(creamosId);
+      if (nombreCompleto) nombresExistentes.add(_nomNorm(nombreCompleto) + '|' + fechaNacNorm);
     });
 
     if (!filasNuevas.length) {
