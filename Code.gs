@@ -1054,7 +1054,7 @@ function reiniciarSistema() {
 
   // Crear hoja temporal SIEMPRE antes de eliminar nada.
   // Google Sheets exige al menos una hoja visible en todo momento.
-  const hojaTemporal = ss.insertSheet('_reinstalando_');
+  const hojaTemporal = ss.getSheetByName('_reinstalando_') || ss.insertSheet('_reinstalando_');
 
   hojasAEliminar.forEach(function(h) {
     try { ss.deleteSheet(h); } catch(e) { /* hoja ya eliminada o protegida */ }
