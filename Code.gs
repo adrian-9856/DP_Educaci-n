@@ -113,7 +113,7 @@ const MODALIDADES    = ['Presencial', 'Semi-presencial'];
 const ESTADOS        = ['Inscritx', 'Retiradx', 'Graduadx'];
 // Estado especial para Quinto Bachillerato al completar el ciclo
 const ESTADOS_QUINTO = ['Inscritx', 'Retiradx', 'Ciclo de Vida Terminado'];
-const ACCIONES       = ['-- Seleccionar --', 'Enviar a: Lista de Espera'];
+const ACCIONES       = ['-- Seleccionar --', ...GRADOS.map(function(g){ return 'Enviar a: ' + g; })];
 const ULTIMO_ANIO_OPCIONES = [
   'Sin estudios previos',
   'Primera Etapa de Primaria',
@@ -267,7 +267,6 @@ function onOpen() {
     .addSeparator()
     .addItem('⚙️  Configurar hoja Interés',        'setupHojaInteres')
     .addItem('📥 Configurar Referencias a Programas', 'setupHojaReferencias')
-    .addItem('⏳ Configurar Lista de Espera',        'setupHojaListaEspera')
     .addItem('🔧  Instalar trigger automático',     'installTriggers')
     .addSeparator()
     .addSubMenu(
@@ -387,7 +386,7 @@ function setupHojaInteres(silencioso) {
   hoja.setColumnWidth(COL_INTERES.GRADO_KOBO,   175);
   hoja.setColumnWidth(COL_INTERES.PAPELERIA,    245);
   hoja.setColumnWidth(COL_INTERES.COMENTARIO,   180);
-  hoja.setColumnWidth(COL_INTERES.ACCION,       185);
+  hoja.setColumnWidth(COL_INTERES.ACCION,       220);
 
   // ── Alturas de fila uniformes (datos compactos) ─────────────────────────
   hoja.setRowHeights(2, MAX, 24);
@@ -478,9 +477,10 @@ function setupHojaInteres(silencioso) {
     'Úsalo como referencia para seleccionar la Acción.'
   );
   hoja.getRange(1, COL_INTERES.ACCION).setNote(
-    '🟡 Amarillo = acción pendiente de procesar\n' +
-    '🟢 Verde = ya transferido a hoja de grado\n\n' +
-    'Para transferir: DP Educación → 🔄 Procesar acciones pendientes'
+    '🟡 Amarillo = envío pendiente\n' +
+    '🟢 Verde (fila entera) = ya transferido al grado\n\n' +
+    'Selecciona "Enviar a: [Grado]" para transferir directo.\n' +
+    'O usa: menú → 🔄 Procesar acciones pendientes (lote).'
   );
 
   if (!silencioso) SpreadsheetApp.getUi().alert(
@@ -712,9 +712,11 @@ function onEdit(e) {
   const fila      = range.getRow();
   const valor     = (e.value || '').toString().trim();
 
-  // ── Transferir desde Hoja de Interés → Lista de Espera ──────────────────
+  // ── Transferir desde Hoja de Interés → Hoja de Grado (directo) ──────────
   if (nombreH === HOJA_INTERES && col === COL_INTERES.ACCION && fila >= 2) {
-    if (valor === 'Enviar a: Lista de Espera') _transInteresAListaEspera(fila);
+    if (!valor || valor === '-- Seleccionar --') return;
+    const grado = valor.replace('Enviar a: ', '').trim();
+    if (GRADOS.indexOf(grado) >= 0) _transferirEstudiante(fila, grado);
     return;
   }
 
@@ -723,13 +725,6 @@ function onEdit(e) {
     return; // El desplegable Sí/No solo guarda el valor, no hace transferencia
   }
 
-  // ── Transferir desde Lista de Espera → Hoja de Grado ─────────────────────
-  if (nombreH === HOJA_LISTA_ESPERA && col === COL_LISTA.ACCION && fila >= 2) {
-    if (!valor || valor === '-- Seleccionar --') return;
-    const grado = valor.replace('Enviar a: ', '').trim();
-    if (GRADOS.indexOf(grado) >= 0) _transListaEsperaAGrado(fila, grado);
-    return;
-  }
 
   // ── Detectar cambio de Estado en hojas de grado ──────────────────────────
   if (col === COL_GRADO.ESTADO && fila >= 3) {
@@ -879,15 +874,16 @@ function procesarAccionesPendientes() {
   acciones.forEach(function(row, idx) {
     const v = (row[0] || '').toString().trim();
     if (!v || v === '-- Seleccionar --' || v.charAt(0) === '✅') return;
-    if (v === 'Enviar a: Lista de Espera') {
-      _transInteresAListaEspera(idx + 2);
+    const grado = v.replace('Enviar a: ', '').trim();
+    if (GRADOS.indexOf(grado) >= 0) {
+      _transferirEstudiante(idx + 2, grado);
       procesados++;
     }
   });
 
   ui.alert(procesados === 0
     ? 'No hay acciones pendientes.'
-    : '✅ Se procesaron ' + procesados + ' estudiante(s).');
+    : '✅ Se transfirieron ' + procesados + ' estudiante(s) a sus hojas de grado.');
 }
 
 function mostrarResumen() {
@@ -1035,7 +1031,7 @@ function reiniciarSistema() {
 
   // 2. Identificar hojas a eliminar (Interés + grados todos los años + Seguimiento + Referencias + Lista de Espera)
   const hojas       = ss.getSheets();
-  const nombresDP   = [HOJA_INTERES, HOJA_SEGUIMIENTO, HOJA_REFERENCIAS, HOJA_LISTA_ESPERA];
+  const nombresDP   = [HOJA_INTERES, HOJA_SEGUIMIENTO, HOJA_REFERENCIAS];
   // Incluir cualquier hoja cuyo nombre empiece con un grado conocido
   hojas.forEach(function(h) {
     const n = h.getName();
@@ -1066,7 +1062,6 @@ function reiniciarSistema() {
     crearTodasLasHojas(true);
     setupHojaSeguimiento(true);
     setupHojaReferencias(true);
-    setupHojaListaEspera(true);
     installTriggers();
   } catch(e) {
     ui.alert('⚠️ Error durante reinstalación:\n' + e.message);
@@ -1173,13 +1168,13 @@ function crearHojaGuia() {
     'Participante llena el formulario en línea (tablet / teléfono / compu).',
     '#C5CAE9', '#E8EAF6');
   fila2(f++, '  ☁️ KoboToolbox API',
-    'Sistema jalat los datos cada minuto (sync automático) o cuando tú lo pides.',
+    'Sistema jala los datos cada minuto (sync automático) o cuando tú lo pides.',
     '#C5CAE9', '#E8EAF6');
   fila2(f++, '  📋 Hoja de Interés',
-    'Solo llegan quienes marcaron SÍ en Educación. Aquí revisas y asignas grado.',
+    'Solo llegan quienes marcaron SÍ en Educación. Aquí revisas y con la columna "Acción" envías directo al grado.',
     '#C5CAE9', '#E8EAF6');
   fila2(f++, '  📚 Hoja de Grado',
-    'El participante pasa aquí al seleccionar "Acción". Seguimiento durante el ciclo.',
+    'El participante aparece aquí al seleccionar "Enviar a: [Grado]". Seguimiento durante el ciclo.',
     '#C5CAE9', '#E8EAF6');
   fila2(f++, '  🎓 Seguimiento Graduados',
     'Al terminar Quinto Bachillerato pasa aquí para seguimiento post-programa.',
@@ -1187,11 +1182,8 @@ function crearHojaGuia() {
   esp(f++);
   filaC(f++, '  ─ ─ ─  FLUJO PARALELO  ─ ─ ─', '#F5F5F5');
   fila2(f++, '  📩 Referencias a Programas',
-    'Otro programa de Creamos refiere a alguien al área de Educación. Se sincroniza desde otro formulario Kobo.',
+    'Otro programa de Creamos refiere a alguien al área de Educación. Se sincroniza desde otro formulario Kobo. Columna "¿Llena Hoja de Interés?" marca Sí/No manualmente.',
     '#F3E5F5', '#FAFAFA');
-  fila2(f++, '  ⏳ Lista de Espera',
-    'Personas referidas que no tienen cupo todavía. Desde aquí se pueden mover a Hoja de Interés.',
-    '#FFF3E0', '#FAFAFA');
   esp(f++);
 
   // ── SECCIÓN 1: LAS HOJAS ──────────────────────────────────────────────────
@@ -1215,7 +1207,7 @@ function crearHojaGuia() {
   fila2(f++, '  Col 11 · Grado Kobo', 'Grado sugerido por KoboToolbox según nivel declarado.', '#F3E5F5', '#FAFAFA');
   fila2(f++, '  Col 12 · Papelería', 'Documentos faltantes. Se llena con el selector del menú.', '#F3E5F5', '#FAFAFA');
   fila2(f++, '  Col 13 · Comentario', 'Notas de seguimiento sobre papelería u otro asunto.', '#F3E5F5', '#FAFAFA');
-  fila2(f++, '  ⬅ Col 14 · Acción  (LA MÁS IMPORTANTE)', 'Selecciona "Enviar a: [Grado]" → el participante se mueve automáticamente a esa hoja de grado. Cuando ya fue enviado muestra "✅ [Grado]" en gris.', '#CE93D8', '#F3E5F5');
+  fila2(f++, '  ⬅ Col 14 · Acción  (LA MÁS IMPORTANTE)', 'Selecciona "Enviar a: [Grado]" → el participante pasa directamente a esa hoja de grado. Cuando ya fue enviado muestra "✅ [Grado]" y la fila entera se pone verde.', '#CE93D8', '#F3E5F5');
   esp(f++);
 
   subtitulo(f++, '📚  Hojas de Grado  (ej. "Primera Etapa de Primaria 2025")', '#E8F5E9');
@@ -1253,23 +1245,6 @@ function crearHojaGuia() {
   fila2(f++, '  ⬅ Col 14 · ¿Llena Hoja de Interés?', '"Sí" = ya fue procesado / ingresado a Hoja de Interés.  "No" = pendiente. Solo marca, no hace ninguna transferencia automática.', '#CE93D8', '#F3E5F5');
   esp(f++);
 
-  subtitulo(f++, '⏳  Lista de Espera  —  SIN CUPO POR AHORA', '#FFF8E1');
-  filaC(f++, 'Personas referidas que aún no tienen cupo. Se agregan manualmente aquí. Cuando haya cupo, usa la columna Acción para enviarlas a su hoja de grado.', '#FAFAFA');
-  esp(f++);
-  subtitulo(f++, '   Columnas de "Lista de Espera"', '#FFF3E0');
-  fila2(f++, '  Col 1 · Creamos ID',         'ID del referido.',                               '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 2 · Nombre',             'Nombre completo.',                               '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 3 · Nombre Preferido',   'Como prefiere que le llamen.',                  '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 4 · DPI / CUI',          'Documento de identidad.',                       '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 5 · Fecha de Nacimiento','Fecha de nacimiento.',                           '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 6 · Edad',               'Edad calculada.',                               '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 7 · Género',             'Género.',                                       '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 8 · Teléfono',           'Contacto.',                                     '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 9 · Zona / Colonia',     'Lugar de residencia.',                          '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  Col 10 · Último Nivel',      'Último grado cursado.',                         '#FFF8E1', '#FAFAFA');
-  fila2(f++, '  ⬅ Col 11 · Acción',         'Cuando hay cupo: mover manualmente a Hoja de Interés.', '#FFCC80', '#FFF8E1');
-  esp(f++);
-
   subtitulo(f++, '🎓  Seguimiento Graduados', '#FFF3E0');
   filaC(f++, 'Para quienes terminaron Quinto Bachillerato (último grado). Permite dar seguimiento de qué pasó con ellos después: empleo, estudios, etc.', '#FAFAFA');
   esp(f++);
@@ -1291,7 +1266,7 @@ function crearHojaGuia() {
   fila2(f++, '  🔧 Instalar trigger', 'Activa el detector de edición (onEdit). Necesario para que la columna "Acción" transfiera sola. Ejecutar una sola vez.', '#E3F2FD', '#FAFAFA');
   fila2(f++, '  📚 Crear hoja de grado', 'Crea la hoja de un grado para el año actual. "✨ Crear TODOS" crea los 6 grados de golpe.', '#E3F2FD', '#FAFAFA');
   fila2(f++, '  📋 Seleccionar papelería', 'Marca los documentos que le faltan al participante. Se guardan en la columna "Papelería".', '#E3F2FD', '#FAFAFA');
-  fila2(f++, '  🔄 Procesar acciones', 'Transfiere en lote a todos los de "Hoja de Interés" que tengan grado seleccionado pero aún no enviados.', '#E3F2FD', '#FAFAFA');
+  fila2(f++, '  🔄 Procesar acciones', 'Transfiere en lote a todos los de "Hoja de Interés" que tengan "Enviar a: [Grado]" seleccionado pero aún no enviados.', '#E3F2FD', '#FAFAFA');
   fila2(f++, '  📊 Ver resumen', 'Muestra conteo de estudiantes por grado y estado.', '#E3F2FD', '#FAFAFA');
   fila2(f++, '  📅 Cerrar ciclo escolar', 'Fin de año: mueve Inscritx/Retiradx al año nuevo y oculta hojas anteriores. Actualiza SCHOOL_YEAR antes de usarlo.', '#E3F2FD', '#FAFAFA');
   fila2(f++, '  🎓 Seguimiento', '"Configurar" crea la hoja. "Registrar graduado manual" agrega a alguien que ya terminó sin estar en el sistema.', '#E3F2FD', '#FAFAFA');
@@ -1824,7 +1799,7 @@ function _koboSincronizarReferenciasInterno(url) {
     // ── Identificadores ya en la hoja (dedup) ────────────────────────────────
     const ss      = SpreadsheetApp.getActiveSpreadsheet();
     let   hojaRef = ss.getSheetByName(HOJA_REFERENCIAS);
-    if (!hojaRef) { setupHojaReferencias(); hojaRef = ss.getSheetByName(HOJA_REFERENCIAS); }
+    if (!hojaRef) { setupHojaReferencias(true); hojaRef = ss.getSheetByName(HOJA_REFERENCIAS); }
 
     const ultimaFila        = hojaRef.getLastRow();
     const dpisExistentes    = new Set();
