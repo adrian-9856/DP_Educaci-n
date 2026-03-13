@@ -113,7 +113,7 @@ const MODALIDADES    = ['Presencial', 'Semi-presencial'];
 const ESTADOS        = ['Inscritx', 'Retiradx', 'Graduadx'];
 // Estado especial para Quinto Bachillerato al completar el ciclo
 const ESTADOS_QUINTO = ['Inscritx', 'Retiradx', 'Ciclo de Vida Terminado'];
-const ACCIONES       = ['-- Seleccionar --', 'Enviar a: Lista de Espera'];
+const ACCIONES       = ['Sí', 'No'];
 const ULTIMO_ANIO_OPCIONES = [
   'Sin estudios previos',
   'Primera Etapa de Primaria',
@@ -387,7 +387,7 @@ function setupHojaInteres(silencioso) {
   hoja.setColumnWidth(COL_INTERES.GRADO_KOBO,   175);
   hoja.setColumnWidth(COL_INTERES.PAPELERIA,    245);
   hoja.setColumnWidth(COL_INTERES.COMENTARIO,   180);
-  hoja.setColumnWidth(COL_INTERES.ACCION,       185);
+  hoja.setColumnWidth(COL_INTERES.ACCION,        80);
 
   // ── Alturas de fila uniformes (datos compactos) ─────────────────────────
   hoja.setRowHeights(2, MAX, 24);
@@ -419,7 +419,7 @@ function setupHojaInteres(silencioso) {
   // ── Colores especiales por columna (se aplican encima del banding) ───────
   hoja.getRange(2, COL_INTERES.PAPELERIA,  MAX, 1).setBackground('#E3F2FD'); // azul claro
   hoja.getRange(2, COL_INTERES.GRADO_KOBO, MAX, 1).setBackground('#F3E5F5'); // morado claro
-  hoja.getRange(2, COL_INTERES.ACCION,     MAX, 1).setBackground('#FFFDE7'); // amarillo muy claro
+  hoja.getRange(2, COL_INTERES.ACCION,     MAX, 1).setBackground(null);      // color lo maneja formato condicional
   hoja.getRange(2, COL_INTERES.FECHA_NAC,  MAX, 1).setNumberFormat('dd/mm/yyyy');
 
   // ── Borde exterior de tabla ─────────────────────────────────────────────
@@ -451,16 +451,16 @@ function setupHojaInteres(silencioso) {
 
   // ── Formato condicional ─────────────────────────────────────────────────
   hoja.setConditionalFormatRules([
-    // Fila completa verde = ya procesada (✅)
+    // Acción = Sí → celda verde
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=LEFT($N2,1)="✅"')
-      .setBackground('#E8F5E9').setFontColor('#1B5E20')
-      .setRanges([hoja.getRange(2, 1, MAX, NUM_COLS)])
+      .whenTextEqualTo('Sí')
+      .setBackground('#C8E6C9').setFontColor('#1B5E20')
+      .setRanges([hoja.getRange(2, COL_INTERES.ACCION, MAX, 1)])
       .build(),
-    // Acción pendiente = amarillo en columna Acción
+    // Acción = No → celda roja
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($N2<>"",($N2<>"-- Seleccionar --"),LEFT($N2,1)<>"✅")')
-      .setBackground('#FFF176').setFontColor('#F57F17')
+      .whenTextEqualTo('No')
+      .setBackground('#FFCDD2').setFontColor('#B71C1C')
       .setRanges([hoja.getRange(2, COL_INTERES.ACCION, MAX, 1)])
       .build()
   ]);
@@ -478,9 +478,9 @@ function setupHojaInteres(silencioso) {
     'Úsalo como referencia para seleccionar la Acción.'
   );
   hoja.getRange(1, COL_INTERES.ACCION).setNote(
-    '🟡 Amarillo = acción pendiente de procesar\n' +
-    '🟢 Verde = ya transferido a hoja de grado\n\n' +
-    'Para transferir: DP Educación → 🔄 Procesar acciones pendientes'
+    '🟢 Sí = alumno confirmado\n' +
+    '🔴 No = no aplica / descartado\n\n' +
+    'Se marca Sí automáticamente al importar desde KoboToolbox.'
   );
 
   if (!silencioso) SpreadsheetApp.getUi().alert(
@@ -712,9 +712,8 @@ function onEdit(e) {
   const fila      = range.getRow();
   const valor     = (e.value || '').toString().trim();
 
-  // ── Transferir desde Hoja de Interés → Lista de Espera ──────────────────
+  // ── Acción Sí/No en Hoja de Interés (solo marca, no transfiere) ─────────
   if (nombreH === HOJA_INTERES && col === COL_INTERES.ACCION && fila >= 2) {
-    if (valor === 'Enviar a: Lista de Espera') _transInteresAListaEspera(fila);
     return;
   }
 
@@ -875,19 +874,16 @@ function procesarAccionesPendientes() {
   const acciones = hojaInteres
     .getRange(2, COL_INTERES.ACCION, ultimaFila - 1, 1).getValues();
 
-  let procesados = 0;
-  acciones.forEach(function(row, idx) {
-    const v = (row[0] || '').toString().trim();
-    if (!v || v === '-- Seleccionar --' || v.charAt(0) === '✅') return;
-    if (v === 'Enviar a: Lista de Espera') {
-      _transInteresAListaEspera(idx + 2);
-      procesados++;
-    }
-  });
+  const conSi  = acciones.filter(function(r){ return (r[0]||'').toString().trim() === 'Sí'; }).length;
+  const conNo  = acciones.filter(function(r){ return (r[0]||'').toString().trim() === 'No'; }).length;
+  const vacias = acciones.filter(function(r){ return (r[0]||'').toString().trim() === ''; }).length;
 
-  ui.alert(procesados === 0
-    ? 'No hay acciones pendientes.'
-    : '✅ Se procesaron ' + procesados + ' estudiante(s).');
+  ui.alert(
+    '📊 Resumen de Acción en Hoja de Interés\n\n' +
+    '🟢 Sí:     ' + conSi  + ' alumno(s)\n' +
+    '🔴 No:     ' + conNo  + ' alumno(s)\n' +
+    '⬜ Vacías: ' + vacias + ' fila(s)'
+  );
 }
 
 function mostrarResumen() {
@@ -2516,8 +2512,8 @@ function _koboSincronizar(url, modoHistorico) {
       // ── 12. Comentario de papelería ──────────────────────────────────────
       const comentario = String(idx.COMENTARIO >= 0 ? (row[idx.COMENTARIO] || '') : '').trim();
 
-      // ── 13. Acción: siempre vacía — se selecciona manualmente ───────────
-      const accion = '';
+      // ── 13. Acción: Sí automáticamente al importar desde KoboToolbox ───
+      const accion = 'Sí';
 
       filasNuevas.push([
         creamosId,         // 1  Creamos ID
